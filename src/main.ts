@@ -14,12 +14,14 @@ interface MusicNotationSettings {
 	scale: number;
 	enablePlayer: boolean;
 	staveProfile: StaveChoice;
+	showChordDiagrams: boolean;
 }
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
 	scale: 1.0,
 	enablePlayer: false,
 	staveProfile: "scoretab",
+	showChordDiagrams: true,
 };
 
 function staveProfileFor(choice: StaveChoice): alphaTab.StaveProfile {
@@ -86,6 +88,12 @@ export default class MusicNotationPlugin extends Plugin {
 			// Per-staff \staff directives in the alphaTex still override this.
 			settings.display.staveProfile = staveProfileFor(
 				this.settings.staveProfile
+			);
+			// Chord names (inline {ch}) always render; the diagram grid at the
+			// top of the score is the part that's optional.
+			settings.notation.elements.set(
+				alphaTab.NotationElement.ChordDiagrams,
+				this.settings.showChordDiagrams
 			);
 
 			// alphaTab draws black by default — invisible in dark themes. Paint
@@ -162,6 +170,20 @@ class MusicNotationSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.staveProfile)
 					.onChange(async (v) => {
 						this.plugin.settings.staveProfile = v as StaveChoice;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Show chord diagrams")
+			.setDesc(
+				"Show the chord-box diagram grid at the top of the score. Chord names above the music always show."
+			)
+			.addToggle((t) =>
+				t
+					.setValue(this.plugin.settings.showChordDiagrams)
+					.onChange(async (v) => {
+						this.plugin.settings.showChordDiagrams = v;
 						await this.plugin.saveSettings();
 					})
 			);
