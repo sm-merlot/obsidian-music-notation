@@ -105,11 +105,11 @@ export default class MusicNotationPlugin extends Plugin {
 			// "effect bands" — spread those apart (the band gaps), and add room
 			// around the system and above the staff.
 			const d = settings.display;
-			d.firstSystemPaddingTop = 14;
-			d.systemPaddingTop = 20;
+			d.firstSystemPaddingTop = 30;
+			d.systemPaddingTop = 34;
 			d.systemPaddingBottom = 16;
 			d.notationStaffPaddingTop = 10;
-			d.effectStaffPaddingTop = 6;
+			d.effectStaffPaddingTop = 14;
 			d.effectStaffPaddingBottom = 10;
 			d.effectBandPaddingBottom = 12;
 			d.lyricLinesPaddingBetween = 5;
