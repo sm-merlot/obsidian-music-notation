@@ -1,5 +1,6 @@
-import { Plugin, MarkdownPostProcessorContext, normalizePath } from "obsidian";
+import { Plugin, MarkdownPostProcessorContext } from "obsidian";
 import * as alphaTab from "@coderline/alphatab";
+import { BRAVURA_WOFF2_BASE64 } from "./bravura-font";
 
 interface MusicNotationSettings {
 	scale: number;
@@ -11,16 +12,14 @@ const DEFAULT_SETTINGS: MusicNotationSettings = {
 	enablePlayer: false,
 };
 
+const FONT_DATA_URL = `data:font/woff2;base64,${BRAVURA_WOFF2_BASE64}`;
+
 export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
-	/** Absolute resource:// URL to the bundled alphaTab font directory. */
-	private fontDirectory = "";
+	private fontReady: Promise<void> | null = null;
 
 	async onload() {
 		await this.loadSettings();
-		this.resolveFontDirectory();
-
-		// Render fenced ```alphatab blocks (alphaTex source) as staff + tab.
 		this.registerMarkdownCodeBlockProcessor(
 			"alphatab",
 			(source, el, ctx) => this.renderBlock(source, el, ctx)
@@ -28,36 +27,40 @@ export default class MusicNotationPlugin extends Plugin {
 	}
 
 	/**
-	 * alphaTab needs the Bravura SMuFL font to draw glyphs. The font files are
-	 * copied into the plugin folder at build/release time (see scripts). We hand
-	 * alphaTab a resource path it can fetch inside Obsidian's Electron sandbox.
+	 * alphaTab draws notation from the Bravura SMuFL font. We embed it as base64
+	 * and register it under alphaTab's expected family name ("alphaTab") via the
+	 * FontFace API — no file fetch, so it works inside Obsidian's sandbox and the
+	 * plugin ships as just main.js + manifest.json + styles.css (BRAT-friendly).
 	 */
-	private resolveFontDirectory() {
-		const pluginDir = normalizePath(
-			`${this.app.vault.configDir}/plugins/${this.manifest.id}/font`
-		);
-		// getResourcePath turns a vault-relative path into an app:// URL the
-		// renderer is allowed to load.
-		this.fontDirectory = this.app.vault.adapter.getResourcePath(pluginDir);
+	private ensureFont(): Promise<void> {
+		if (this.fontReady) return this.fontReady;
+		const face = new FontFace("alphaTab", `url(${FONT_DATA_URL})`);
+		this.fontReady = face.load().then((loaded) => {
+			(document.fonts as unknown as Set<FontFace>).add(loaded);
+		});
+		return this.fontReady;
 	}
 
-	private renderBlock(
+	private async renderBlock(
 		source: string,
 		el: HTMLElement,
 		_ctx: MarkdownPostProcessorContext
 	) {
 		const container = el.createDiv({ cls: "music-notation" });
-
-		const settings = new alphaTab.Settings();
-		settings.core.engine = "svg";
-		settings.core.fontDirectory = this.fontDirectory;
-		settings.display.scale = this.settings.scale;
-		settings.player.enablePlayer = this.settings.enablePlayer;
-		// No web worker: Obsidian's module loader does not expose one cleanly.
-		// Render on the main thread; fine for typical song-length scores.
-		settings.core.useWorkers = false;
-
 		try {
+			await this.ensureFont();
+
+			const settings = new alphaTab.Settings();
+			settings.core.engine = "svg";
+			settings.core.useWorkers = false;
+			// Font is already registered via FontFace; tell alphaTab not to fetch.
+			settings.core.fontDirectory = null;
+			settings.core.smuflFontSources = new Map([
+				[alphaTab.FontFileFormat.Woff2, FONT_DATA_URL],
+			]);
+			settings.display.scale = this.settings.scale;
+			settings.player.enablePlayer = this.settings.enablePlayer;
+
 			const api = new alphaTab.AlphaTabApi(container, settings);
 			api.error.on((e) => this.renderError(container, String(e)));
 			api.tex(source);
