@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-music-notation",
-	"version": "0.0.9",
+	"version": "0.1.0",
 	"description": "Obsidian plugin: staff, guitar tab, chords and lyrics in one sheet via alphaTab.",
 	"main": "main.js",
 	"scripts": {

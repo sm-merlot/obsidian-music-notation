@@ -100,6 +100,15 @@ export default class MusicNotationPlugin extends Plugin {
 				alphaTab.NotationElement.EffectDynamics,
 				false
 			);
+			// Hide the "Guitar / Standard Tuning" track label on every block.
+			settings.notation.elements.set(
+				alphaTab.NotationElement.TrackNames,
+				false
+			);
+			settings.notation.elements.set(
+				alphaTab.NotationElement.GuitarTuning,
+				false
+			);
 			// alphaTab packs the tempo / chord / lyric / bar-number rows tight
 			// against the staff and each other. The tempo/chord/lyric rows are
 			// "effect bands" — spread those apart (the band gaps), and add room
@@ -122,10 +131,21 @@ export default class MusicNotationPlugin extends Plugin {
 
 			const api = new alphaTab.AlphaTabApi(container, settings);
 			api.error.on((e) => this.renderError(container, String(e)));
+			// alphaTab paints a "rendered by alphaTab" attribution into the SVG
+			// with no setting to disable it. Strip it after each (re)render.
+			api.renderFinished.on(() => this.stripBranding(container));
 			api.tex(source);
 		} catch (e) {
 			this.renderError(container, String(e));
 		}
+	}
+
+	private stripBranding(container: HTMLElement) {
+		container.querySelectorAll("text, tspan, a").forEach((el) => {
+			if (/rendered by alphatab/i.test(el.textContent || "")) {
+				(el.closest("a") || el).remove();
+			}
+		});
 	}
 
 	/**
