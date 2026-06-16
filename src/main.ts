@@ -105,11 +105,13 @@ export default class MusicNotationPlugin extends Plugin {
 			// "effect bands" — spread those apart (the band gaps), and add room
 			// around the system and above the staff.
 			const d = settings.display;
-			d.firstSystemPaddingTop = 30;
-			d.systemPaddingTop = 34;
-			d.systemPaddingBottom = 16;
+			// NB: do NOT raise firstSystemPaddingTop / systemPaddingTop — they
+			// push the section-marker band down onto the chord band so the
+			// section label and chord name collapse onto the same row. Spacing
+			// between the tempo/chord/lyric rows comes from the effect-band
+			// paddings below, which don't have that side effect.
 			d.notationStaffPaddingTop = 10;
-			d.effectStaffPaddingTop = 14;
+			d.effectStaffPaddingTop = 6;
 			d.effectStaffPaddingBottom = 10;
 			d.effectBandPaddingBottom = 12;
 			d.lyricLinesPaddingBetween = 5;
