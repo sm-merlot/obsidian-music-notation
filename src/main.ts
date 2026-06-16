@@ -95,6 +95,13 @@ export default class MusicNotationPlugin extends Plugin {
 				alphaTab.NotationElement.ChordDiagrams,
 				this.settings.showChordDiagrams
 			);
+			// alphaTab packs the tempo / chord / lyric / bar-number rows tight
+			// against the staff. Give them vertical breathing room by default.
+			const d = settings.display;
+			d.firstSystemPaddingTop = 14;
+			d.systemPaddingTop = 20;
+			d.systemPaddingBottom = 16;
+			d.notationStaffPaddingTop = 10;
 
 			// alphaTab draws black by default — invisible in dark themes. Paint
 			// glyphs and staff lines with the active theme's text color.
