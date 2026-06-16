@@ -95,6 +95,11 @@ export default class MusicNotationPlugin extends Plugin {
 				alphaTab.NotationElement.ChordDiagrams,
 				this.settings.showChordDiagrams
 			);
+			// No dynamics (forte/piano markers) — these are lyric/tab sheets.
+			settings.notation.elements.set(
+				alphaTab.NotationElement.EffectDynamics,
+				false
+			);
 			// alphaTab packs the tempo / chord / lyric / bar-number rows tight
 			// against the staff and each other. The tempo/chord/lyric rows are
 			// "effect bands" — spread those apart (the band gaps), and add room

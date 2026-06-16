@@ -1,7 +1,7 @@
 {
 	"id": "music-notation",
 	"name": "Music Notation",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"minAppVersion": "1.4.0",
 	"description": "Write and render staff notation, guitar tab, chords and lyrics from text code blocks, powered by alphaTab.",
 	"author": "sm-merlot",
