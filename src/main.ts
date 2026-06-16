@@ -61,12 +61,39 @@ export default class MusicNotationPlugin extends Plugin {
 			settings.display.scale = this.settings.scale;
 			settings.player.enablePlayer = this.settings.enablePlayer;
 
+			// alphaTab draws black by default — invisible in dark themes. Paint
+			// glyphs and staff lines with the active theme's text color.
+			this.applyThemeColors(settings, container);
+
 			const api = new alphaTab.AlphaTabApi(container, settings);
 			api.error.on((e) => this.renderError(container, String(e)));
 			api.tex(source);
 		} catch (e) {
 			this.renderError(container, String(e));
 		}
+	}
+
+	/**
+	 * Set alphaTab's glyph/line colors to the current theme text color so the
+	 * score is legible in light and dark themes alike. Reads the computed color
+	 * the container inherits (Obsidian's --text-normal).
+	 */
+	private applyThemeColors(settings: alphaTab.Settings, container: HTMLElement) {
+		const rgb = getComputedStyle(container).color.match(/\d+(\.\d+)?/g);
+		if (!rgb || rgb.length < 3) return;
+		const color = new alphaTab.model.Color(
+			Number(rgb[0]),
+			Number(rgb[1]),
+			Number(rgb[2]),
+			255
+		);
+		const r = settings.display.resources;
+		r.mainGlyphColor = color;
+		r.secondaryGlyphColor = color;
+		r.scoreInfoColor = color;
+		r.staffLineColor = color;
+		r.barSeparatorColor = color;
+		r.barNumberColor = color;
 	}
 
 	private renderError(container: HTMLElement, message: string) {
