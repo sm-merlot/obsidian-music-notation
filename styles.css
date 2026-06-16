@@ -1,0 +1,14 @@
+.music-notation {
+	overflow-x: auto;
+	background: var(--background-primary);
+}
+
+.music-notation svg {
+	max-width: 100%;
+}
+
+.music-notation-error {
+	color: var(--text-error);
+	white-space: pre-wrap;
+	font-size: var(--font-smaller);
+}

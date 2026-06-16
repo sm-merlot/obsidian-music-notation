@@ -1,0 +1,23 @@
+{
+	"name": "obsidian-music-notation",
+	"version": "0.0.1",
+	"description": "Obsidian plugin: staff, guitar tab, chords and lyrics in one sheet via alphaTab.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+	},
+	"keywords": ["obsidian", "music", "tab", "notation", "alphatab", "guitar"],
+	"author": "sm-merlot",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.21.5",
+		"obsidian": "latest",
+		"typescript": "^5.4.5"
+	},
+	"dependencies": {
+		"@coderline/alphatab": "^1.3.1"
+	}
+}
