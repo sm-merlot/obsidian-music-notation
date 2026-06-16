@@ -96,12 +96,18 @@ export default class MusicNotationPlugin extends Plugin {
 				this.settings.showChordDiagrams
 			);
 			// alphaTab packs the tempo / chord / lyric / bar-number rows tight
-			// against the staff. Give them vertical breathing room by default.
+			// against the staff and each other. The tempo/chord/lyric rows are
+			// "effect bands" — spread those apart (the band gaps), and add room
+			// around the system and above the staff.
 			const d = settings.display;
 			d.firstSystemPaddingTop = 14;
 			d.systemPaddingTop = 20;
 			d.systemPaddingBottom = 16;
 			d.notationStaffPaddingTop = 10;
+			d.effectStaffPaddingTop = 6;
+			d.effectStaffPaddingBottom = 10;
+			d.effectBandPaddingBottom = 12;
+			d.lyricLinesPaddingBetween = 5;
 
 			// alphaTab draws black by default — invisible in dark themes. Paint
 			// glyphs and staff lines with the active theme's text color.
