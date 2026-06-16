@@ -1,16 +1,37 @@
-import { Plugin, MarkdownPostProcessorContext } from "obsidian";
+import {
+	App,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	MarkdownPostProcessorContext,
+} from "obsidian";
 import * as alphaTab from "@coderline/alphatab";
 import { BRAVURA_WOFF2_BASE64 } from "./bravura-font";
+
+type StaveChoice = "scoretab" | "tab" | "score";
 
 interface MusicNotationSettings {
 	scale: number;
 	enablePlayer: boolean;
+	staveProfile: StaveChoice;
 }
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
 	scale: 1.0,
 	enablePlayer: false,
+	staveProfile: "scoretab",
 };
+
+function staveProfileFor(choice: StaveChoice): alphaTab.StaveProfile {
+	switch (choice) {
+		case "tab":
+			return alphaTab.StaveProfile.Tab;
+		case "score":
+			return alphaTab.StaveProfile.Score;
+		default:
+			return alphaTab.StaveProfile.ScoreTab;
+	}
+}
 
 const FONT_DATA_URL = `data:font/woff2;base64,${BRAVURA_WOFF2_BASE64}`;
 
@@ -20,6 +41,7 @@ export default class MusicNotationPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		this.addSettingTab(new MusicNotationSettingTab(this.app, this));
 		this.registerMarkdownCodeBlockProcessor(
 			"alphatab",
 			(source, el, ctx) => this.renderBlock(source, el, ctx)
@@ -60,6 +82,11 @@ export default class MusicNotationPlugin extends Plugin {
 			]);
 			settings.display.scale = this.settings.scale;
 			settings.player.enablePlayer = this.settings.enablePlayer;
+			// Default staves for blocks that don't set \staff{...} themselves.
+			// Per-staff \staff directives in the alphaTex still override this.
+			settings.display.staveProfile = staveProfileFor(
+				this.settings.staveProfile
+			);
 
 			// alphaTab draws black by default — invisible in dark themes. Paint
 			// glyphs and staff lines with the active theme's text color.
@@ -110,5 +137,33 @@ export default class MusicNotationPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+}
+
+class MusicNotationSettingTab extends PluginSettingTab {
+	constructor(app: App, private plugin: MusicNotationPlugin) {
+		super(app, plugin);
+	}
+
+	display() {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		new Setting(containerEl)
+			.setName("Default staves")
+			.setDesc(
+				"Which staves to show. A block that sets \\staff{...} in its alphaTex overrides this."
+			)
+			.addDropdown((d) =>
+				d
+					.addOption("scoretab", "Notation + tab")
+					.addOption("tab", "Tab only")
+					.addOption("score", "Notation only")
+					.setValue(this.plugin.settings.staveProfile)
+					.onChange(async (v) => {
+						this.plugin.settings.staveProfile = v as StaveChoice;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
