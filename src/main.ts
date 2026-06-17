@@ -255,22 +255,20 @@ export default class MusicNotationPlugin extends Plugin {
 			".markdown-preview-view, .markdown-source-view, .view-content"
 		) as HTMLElement | null;
 		if (!pane || !column || column < 50) return column || 800;
-		const cs = getComputedStyle(pane);
-		const padL = parseFloat(cs.paddingLeft) || 0;
-		const padR = parseFloat(cs.paddingRight) || 0;
-		const inner = pane.clientWidth - padL - padR;
-		if (inner <= column + 8) return column;
-		// Shift the block left so its left edge sits exactly at the pane's content
-		// edge, then stretch to the full inner width. Exact (rect-based) offset —
-		// no centring assumptions — so the controls/first bar aren't clipped.
-		const offset =
+		// Leave a safety inset from the pane edges so labels/string names aren't
+		// clipped flush against the edge.
+		const SAFE = 16;
+		const avail = pane.clientWidth - SAFE * 2;
+		if (avail <= column + 8) return column;
+		// Shift the block so its left edge sits SAFE px inside the pane (border-
+		// relative offset — robust to whatever padding the readable column uses).
+		const left =
 			container.getBoundingClientRect().left -
-			pane.getBoundingClientRect().left -
-			padL;
-		container.style.width = `${inner}px`;
-		container.style.marginLeft = `${-offset}px`;
+			pane.getBoundingClientRect().left;
+		container.style.width = `${avail}px`;
+		container.style.marginLeft = `${SAFE - left}px`;
 		container.style.maxWidth = "none";
-		return inner;
+		return avail;
 	}
 
 	private scheduleRender(render: () => void) {
