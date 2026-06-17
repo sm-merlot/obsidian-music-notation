@@ -79,7 +79,64 @@ export function stripNotationStaff(svg) {
 		});
 	});
 
+	// The stripped notation staff still reserved its full height, leaving a big
+	// empty band above the lyrics/tab in every system. Re-stack the systems by
+	// their real content (lyrics, tab, stems) and shrink the viewBox to fit.
+	compactSystems(svg);
+
 	return svg;
+}
+
+// Raw-coordinate paddings (Verovio internal units).
+const TOP_PAD = 200;
+const SYS_GAP = 500;
+const BOT_PAD = 200;
+
+function compactSystems(svg) {
+	const inner = svg.querySelector("svg"); // the definition-scale (raw-coord) svg
+	const pm = svg.querySelector("g.page-margin");
+	const ivb = (inner && inner.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+	const ovb = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+	if (!inner || !pm || ivb.length !== 4 || ovb.length !== 4) return;
+
+	// Pin the content's top margin (page-margin's y) small.
+	const pmm = (pm.getAttribute("transform") || "").match(/translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/);
+	const px = pmm ? Number(pmm[1]) : 0;
+	pm.setAttribute("transform", `translate(${px}, ${TOP_PAD})`);
+
+	// Stack systems by their real content, from local y=0.
+	let cursor = 0;
+	svg.querySelectorAll("g.system").forEach((sys) => {
+		const bb = contentBox(sys);
+		if (!bb) return;
+		sys.setAttribute("transform", `translate(0 ${(cursor - bb.top).toFixed(1)})`);
+		cursor += bb.bot - bb.top + SYS_GAP;
+	});
+	const totalInner = Math.round(TOP_PAD + Math.max(0, cursor - SYS_GAP) + BOT_PAD);
+	const scale = ivb[2] / ovb[2];
+
+	inner.setAttribute("viewBox", `${ivb[0]} ${ivb[1]} ${ivb[2]} ${totalInner}`);
+	svg.setAttribute("viewBox", `${ovb[0]} ${ovb[1]} ${ovb[2]} ${Math.round(totalInner / scale)}`);
+}
+
+// Vertical extent of a system's real (post-strip) content: y of every line/stem
+// path endpoint and every text baseline.
+function contentBox(sys) {
+	let top = Infinity;
+	let bot = -Infinity;
+	const acc = (y) => {
+		if (y < top) top = y;
+		if (y > bot) bot = y;
+	};
+	sys.querySelectorAll("path").forEach((p) => {
+		const d = p.getAttribute("d") || "";
+		for (const m of d.matchAll(/[ML]\s*-?[\d.]+\s+(-?[\d.]+)/g)) acc(Number(m[1]));
+	});
+	sys.querySelectorAll("text").forEach((t) => {
+		const y = parseFloat(t.getAttribute("y"));
+		if (!Number.isNaN(y)) acc(y);
+	});
+	return top === Infinity ? null : { top, bot };
 }
 
 // A straight two-point line path: "M x y L x y".
