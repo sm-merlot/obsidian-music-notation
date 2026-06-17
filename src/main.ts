@@ -241,34 +241,13 @@ export default class MusicNotationPlugin extends Plugin {
 	}
 
 	/**
-	 * Width the score should use. Obsidian's "Readable line length" caps the
-	 * text column well below the pane width, so a wide window otherwise does
-	 * nothing for the music. Break the block out to (most of) the pane width.
-	 * Idempotent: resets its own styles before measuring so re-renders are stable.
+	 * Width the score should fill: the block's natural content width. We do NOT
+	 * break out of Obsidian's "Readable line length" — past attempts clipped
+	 * against ancestor overflow. To use the full window width, turn that setting
+	 * off (Settings → Editor) and the block fills the pane automatically.
 	 */
 	private fitWidth(container: HTMLElement, el: HTMLElement): number {
-		container.style.width = "";
-		container.style.marginLeft = "";
-		container.style.maxWidth = "";
-		const column = container.clientWidth || el.clientWidth || 0;
-		const pane = el.closest(
-			".markdown-preview-view, .markdown-source-view, .view-content"
-		) as HTMLElement | null;
-		if (!pane || !column || column < 50) return column || 800;
-		// Leave a safety inset from the pane edges so labels/string names aren't
-		// clipped flush against the edge.
-		const SAFE = 16;
-		const avail = pane.clientWidth - SAFE * 2;
-		if (avail <= column + 8) return column;
-		// Shift the block so its left edge sits SAFE px inside the pane (border-
-		// relative offset — robust to whatever padding the readable column uses).
-		const left =
-			container.getBoundingClientRect().left -
-			pane.getBoundingClientRect().left;
-		container.style.width = `${avail}px`;
-		container.style.marginLeft = `${SAFE - left}px`;
-		container.style.maxWidth = "none";
-		return avail;
+		return container.clientWidth || el.clientWidth || 800;
 	}
 
 	private scheduleRender(render: () => void) {
