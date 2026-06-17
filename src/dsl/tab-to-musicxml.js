@@ -102,7 +102,7 @@ export function tabToMusicXML(model) {
 						n.tieStop = true;
 					} else {
 						const num = ++lineN;
-						const kind = "hp".includes(n.conn) ? "slur" : "slide";
+						const kind = n.conn === "s" ? "slide" : "slur";
 						(prev[kind + "Start"] ||= []).push(num);
 						(n[kind + "Stop"] ||= []).push(num);
 					}

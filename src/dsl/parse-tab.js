@@ -39,9 +39,9 @@ export function parseDirectives(lines) {
 	return d;
 }
 
-// A connector char between two frets on a string: h hammer, p pull, s/\// slide,
+// A connector char between two frets on a string: h hammer, p pull, s slide,
 // ^ tie. Captured so it links the new onset back to the previous one.
-const CONNECTORS = "hps/\\^";
+const CONNECTORS = "hps^";
 
 // Tokenize one string's bar content into [{col, fret, conn}] onsets. `-` = no
 // onset. A multi-digit fret starts at its first digit's column. `conn` is the

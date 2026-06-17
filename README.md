@@ -31,10 +31,10 @@ A: 5-------------------------------|5-------------------7-------7---
 ````
 
 Between two frets on a string you can write a **connector** (dashes around it are
-fine, e.g. `2-s-3`): `h` hammer-on, `p` pull-off, `s` / `/` / `\` slide between the
-two frets (drawn as a slide line, direction set by the frets), and `^` tie — e.g.
-`7h9`, `9p7`, `2s3`, `7^7`. A tie also lets you hold a note across a slot to line
-lyrics up. Consecutive eighths (or shorter) are beamed by beat automatically.
+fine, e.g. `2-s-3`): `h` hammer-on, `p` pull-off, `s` slide between the two frets,
+and `^` tie — e.g. `7h9`, `9p7`, `2s3`, `7^7`. A tie also lets you hold a note across
+a slot to line lyrics up. Consecutive eighths (or shorter) are beamed by beat
+automatically.
 
 `mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano). The
 `chords` mode (chord-over-lyric) is coming.
