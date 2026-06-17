@@ -92,14 +92,17 @@ export function stripNotationStaff(svg) {
 		if (Number.isFinite(lyrY)) {
 			chordY = lyrY - CHORD_GAP; // sit just above the lyric row
 		} else {
-			// no lyrics: anchor above the tab staff (and its rhythm stems)
-			const measure = sys.querySelector("g.measure");
-			const staves = measure
-				? Array.from(measure.children).filter((c) => hasClass(c, "staff"))
-				: [];
-			const tabTop = staves.length ? staffTopY(staves[staves.length - 1]) : null;
-			if (tabTop == null) return;
-			chordY = tabTop - CHORD_GAP - 320;
+			// no lyrics: sit above the highest tab content (rhythm stems/beams).
+			let minPath = Infinity;
+			sys.querySelectorAll("path").forEach((p) => {
+				const d = p.getAttribute("d") || "";
+				for (const m of d.matchAll(/[ML]\s*-?[\d.]+\s+(-?[\d.]+)/g)) {
+					const y = Number(m[1]);
+					if (y < minPath) minPath = y;
+				}
+			});
+			if (!Number.isFinite(minPath)) return;
+			chordY = minPath - 300;
 		}
 		const newY = chordY.toFixed(1);
 		// the chord glyph carries y on the <text> AND an inner <tspan>; move both
