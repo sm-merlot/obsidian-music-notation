@@ -184,8 +184,8 @@ function contentBox(sys) {
 	return top === Infinity ? null : { top, bot };
 }
 
-// Place a small italic letter (h/p/s) in the gap just above the string line,
-// centred between the two connected fret numbers.
+// Place an italic letter (h/p/s) centred in the gap ABOVE the string line the
+// two connected fret numbers sit on, midway between them.
 function drawConnectors(svg, connections) {
 	const NS = "http://www.w3.org/2000/svg";
 	for (const c of connections) {
@@ -196,15 +196,40 @@ function drawConnectors(svg, connections) {
 		const xb = parseFloat(b.getAttribute("x"));
 		const y = parseFloat(a.getAttribute("y"));
 		if ([xa, xb, y].some(Number.isNaN)) continue;
+
+		const staff = a.closest && a.closest("g.staff");
+		const lines = staff ? staffLineYs(staff) : [];
+		let spacing = 315;
+		let nearest = y;
+		if (lines.length >= 2) {
+			const diffs = [];
+			for (let i = 1; i < lines.length; i++) diffs.push(lines[i] - lines[i - 1]);
+			diffs.sort((p, q) => p - q);
+			spacing = diffs[diffs.length >> 1] || spacing;
+			nearest = lines.reduce((p, q) => (Math.abs(q - y) < Math.abs(p - y) ? q : p), lines[0]);
+		}
+		const fontSize = Math.round(spacing * 0.9);
+		const baseline = nearest - spacing / 2 + fontSize * 0.35; // centred in the gap
+
 		const t = svg.ownerDocument.createElementNS(NS, "text");
 		t.setAttribute("x", ((xa + xb) / 2).toFixed(1));
-		t.setAttribute("y", (y - 95).toFixed(1)); // up into the gap, off the line
+		t.setAttribute("y", baseline.toFixed(1));
 		t.setAttribute("text-anchor", "middle");
-		t.setAttribute("font-size", "190");
+		t.setAttribute("font-size", String(fontSize));
 		t.setAttribute("font-style", "italic");
 		t.textContent = c.label;
 		a.parentNode.appendChild(t);
 	}
+}
+
+// Sorted unique y of a staff's horizontal line paths.
+function staffLineYs(staff) {
+	const ys = new Set();
+	staff.querySelectorAll("path").forEach((p) => {
+		const m = (p.getAttribute("d") || "").match(VLINE);
+		if (m && Math.abs(Number(m[2]) - Number(m[4])) < 1) ys.add(Math.round(Number(m[2])));
+	});
+	return [...ys].sort((p, q) => p - q);
 }
 
 // A straight two-point line path: "M x y L x y".
