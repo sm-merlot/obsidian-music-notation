@@ -52,6 +52,15 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.music-notation-section {
+	font-weight: 600;
+	color: var(--text-normal);
+	margin: 12px 0 2px;
+}
+.music-notation-render > .music-notation-section:first-child {
+	margin-top: 0;
+}
+
 .music-notation-error {
 	color: var(--text-error);
 	white-space: pre-wrap;

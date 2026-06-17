@@ -51,14 +51,10 @@ function makeSyllabifier() {
 export function tabToMusicXML(model) {
 	const d = model.directives;
 	const syllab = makeSyllabifier();
-	// flatten all bars across systems into measures; carry each system's section
-	// label onto its first bar.
+	// flatten all bars across systems into measures
 	const measures = [];
 	for (const sys of model.systems) {
-		sys.bars.forEach((bar, bi) => {
-			if (bi === 0 && sys.section) bar.sectionLabel = sys.section;
-			measures.push(bar);
-		});
+		for (const bar of sys.bars) measures.push(bar);
 	}
 
 	const attributes =
@@ -85,15 +81,7 @@ export function tabToMusicXML(model) {
 				`<duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}` +
 				`<staff>1</staff>${lyric}</note>`;
 		}
-		// Section label as a direction on the TAB staff (staff 2 survives the
-		// notation-staff strip), rendered bold above the tab.
 		let v2 = "";
-		if (bar.sectionLabel) {
-			v2 +=
-				`<direction placement="above"><direction-type>` +
-				`<words font-weight="bold" font-size="11">${esc(bar.sectionLabel)}</words>` +
-				`</direction-type><staff>2</staff></direction>`;
-		}
 		for (const e of bar.events) {
 			const { type, dots, div } = durParts(e.durFrac);
 			e.notes.forEach((n, i) => {

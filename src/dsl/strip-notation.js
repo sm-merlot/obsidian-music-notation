@@ -45,21 +45,58 @@ export function stripNotationStaff(svg) {
 		}
 	});
 
+	// Draw a left barline at the start of every system (Verovio doesn't, and the
+	// ASCII tabs always lead with '|'). Vertical line at the system's first tab
+	// staff left edge, spanning its lines.
+	const NS = "http://www.w3.org/2000/svg";
+	svg.querySelectorAll("g.system").forEach((system) => {
+		const measure = system.querySelector("g.measure");
+		if (!measure) return;
+		const staves = Array.from(measure.children).filter((c) =>
+			hasClass(c, "staff")
+		);
+		const tab = staves[staves.length - 1];
+		const box = tab && staffBox(tab);
+		if (!box) return;
+		const path = svg.ownerDocument.createElementNS(NS, "path");
+		path.setAttribute("d", `M${box.left} ${box.top} L${box.left} ${box.bottom}`);
+		path.setAttribute("stroke-width", "18");
+		const g = svg.ownerDocument.createElementNS(NS, "g");
+		g.setAttribute("class", "barLine");
+		g.appendChild(path);
+		measure.insertBefore(g, measure.firstChild);
+	});
+
 	return svg;
 }
 
 // A straight two-point line path: "M x y L x y".
 const VLINE = /^M\s*(-?[\d.]+)\s+(-?[\d.]+)\s+L\s*(-?[\d.]+)\s+(-?[\d.]+)/;
 
-// Topmost (smallest) y among a staff's horizontal line paths.
-function staffTopY(staff) {
-	let top = null;
+// Bounding box of a staff from its horizontal line paths.
+function staffBox(staff) {
+	let left = null,
+		right = null,
+		top = null,
+		bottom = null;
 	staff.querySelectorAll("path").forEach((p) => {
 		const m = (p.getAttribute("d") || "").match(VLINE);
 		if (!m) return;
-		const y1 = Number(m[2]);
-		const y2 = Number(m[4]);
-		if (Math.abs(y1 - y2) < 1) top = top == null ? y1 : Math.min(top, y1);
+		const x1 = Number(m[1]),
+			y1 = Number(m[2]),
+			x2 = Number(m[3]),
+			y2 = Number(m[4]);
+		if (Math.abs(y1 - y2) >= 1) return; // only horizontal staff lines
+		left = left == null ? Math.min(x1, x2) : Math.min(left, x1, x2);
+		right = right == null ? Math.max(x1, x2) : Math.max(right, x1, x2);
+		top = top == null ? y1 : Math.min(top, y1);
+		bottom = bottom == null ? y1 : Math.max(bottom, y1);
 	});
-	return top;
+	return left == null ? null : { left, right, top, bottom };
+}
+
+// Topmost (smallest) y among a staff's horizontal line paths.
+function staffTopY(staff) {
+	const box = staffBox(staff);
+	return box ? box.top : null;
 }

@@ -7,7 +7,7 @@ import {
 } from "obsidian";
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
-import { tabSrcToMusicXML, stripNotationStaff } from "./dsl/pipeline.js";
+import { tabSrcToSections, stripNotationStaff } from "./dsl/pipeline.js";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -81,9 +81,7 @@ export default class MusicNotationPlugin extends Plugin {
 			return { inputFrom: detectFormat(source), data: source, strip: false };
 		}
 		const mode = dslMode(source);
-		if (mode === "tab") {
-			return { inputFrom: "musicxml", data: tabSrcToMusicXML(source), strip: true };
-		}
+		// tab is handled separately (per-section) in renderBlock.
 		if (mode === "notation") {
 			const body = source
 				.replace(/^\s*(mode|title|meter|unit|tuning|capo)\s*:.*$/gim, "")
@@ -127,54 +125,25 @@ export default class MusicNotationPlugin extends Plugin {
 
 		const render = () => {
 			try {
-				const { inputFrom, data, strip } = this.prepare(source, dsl);
 				const px = this.fitWidth(container, el);
-				const f = this.settings.spacing / 100;
-				tk.setOptions({
-					inputFrom,
-					scale: this.settings.scale,
-					adjustPageHeight: true,
-					pageWidth: Math.round((px * 100) / this.settings.scale),
-					// Spread notes/lyrics horizontally. Verovio defaults: linear
-					// 0.25, non-linear 0.6 (both capped at 1). Scale by the factor.
-					spacingLinear: Math.min(1, 0.25 * f),
-					spacingNonLinear: Math.min(1, 0.6 * f),
-					// Tab carries lyrics on a hidden staff that gets stripped;
-					// pull the staves tight so the leftover band is small.
-					spacingStaff: strip ? 2 : 12,
-					// Very tall page so Verovio wraps into systems but never
-					// paginates — we only render page 1, so it must all fit.
-					pageHeight: 60000,
-					pageMarginLeft: 0,
-					pageMarginRight: 0,
-					pageMarginTop: 0,
-					pageMarginBottom: 0,
-					header: "none",
-					footer: "none",
-					breaks: "auto",
-					svgViewBox: true,
-				});
-
-				if (!tk.loadData(data) || tk.getPageCount() < 1) {
-					this.renderError(
-						target,
-						tk.getLog() || "Verovio could not parse this input."
-					);
-					return;
-				}
-
-				const svg = tk.renderToSVG(1);
-				const svgEl = new DOMParser().parseFromString(
-					svg,
-					"image/svg+xml"
-				).documentElement;
 				target.empty();
-				if (svgEl.nodeName.toLowerCase() !== "svg") {
-					this.renderError(target, "Verovio returned no SVG.");
-					return;
+				if (dsl && dslMode(source) === "tab") {
+					// Render each section as its own SVG so it starts on a new
+					// line and wraps independently. Labels are themed headings.
+					const { sections } = tabSrcToSections(source);
+					for (const sec of sections) {
+						if (sec.label) {
+							target.createDiv({
+								cls: "music-notation-section",
+								text: sec.label,
+							});
+						}
+						target.appendChild(this.renderSvg(tk, sec.xml, "musicxml", px, true));
+					}
+				} else {
+					const { inputFrom, data, strip } = this.prepare(source, dsl);
+					target.appendChild(this.renderSvg(tk, data, inputFrom, px, strip));
 				}
-				if (strip) stripNotationStaff(svgEl);
-				target.appendChild(svgEl);
 			} catch (e) {
 				this.renderError(target, String(e));
 			}
@@ -182,6 +151,55 @@ export default class MusicNotationPlugin extends Plugin {
 
 		this.buildControls(controls, render);
 		render();
+	}
+
+	/** Render one MusicXML/ABC string to a themed SVG element (stripped for tab). */
+	private renderSvg(
+		tk: VerovioToolkit,
+		data: string,
+		inputFrom: InputFormat,
+		px: number,
+		strip: boolean
+	): SVGElement {
+		const f = this.settings.spacing / 100;
+		tk.setOptions({
+			inputFrom,
+			scale: this.settings.scale,
+			adjustPageHeight: true,
+			pageWidth: Math.round((px * 100) / this.settings.scale),
+			// Spread notes/lyrics horizontally. Verovio defaults: linear 0.25,
+			// non-linear 0.6 (both capped at 1). Scale by the factor.
+			spacingLinear: Math.min(1, 0.25 * f),
+			spacingNonLinear: Math.min(1, 0.6 * f),
+			// Tab carries lyrics on a hidden staff that gets stripped; pull the
+			// staves tight so the leftover band is small.
+			spacingStaff: strip ? 2 : 12,
+			// Very tall page so Verovio wraps into systems but never paginates —
+			// we only render page 1, so it must all fit.
+			pageHeight: 60000,
+			// Side padding so systems (and their end barlines) don't sit flush
+			// against the edges and get clipped.
+			pageMarginLeft: 50,
+			pageMarginRight: 50,
+			pageMarginTop: 0,
+			pageMarginBottom: 0,
+			header: "none",
+			footer: "none",
+			breaks: "auto",
+			svgViewBox: true,
+		});
+		if (!tk.loadData(data) || tk.getPageCount() < 1) {
+			throw new Error(tk.getLog() || "Verovio could not parse this input.");
+		}
+		const svgEl = new DOMParser().parseFromString(
+			tk.renderToSVG(1),
+			"image/svg+xml"
+		).documentElement as unknown as SVGElement;
+		if (svgEl.nodeName.toLowerCase() !== "svg") {
+			throw new Error("Verovio returned no SVG.");
+		}
+		if (strip) stripNotationStaff(svgEl);
+		return svgEl;
 	}
 
 	/**

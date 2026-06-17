@@ -1,9 +1,8 @@
-// End-to-end headless test: DSL tab -> MusicXML -> Verovio SVG -> strip notation.
-// Run in a pod with linkedom installed (for the DOM strip step).
+// End-to-end headless test: DSL tab -> per-section MusicXML -> Verovio -> strip.
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
 import { DOMParser } from "linkedom";
-import { tabSrcToMusicXML, stripNotationStaff } from "../../src/dsl/pipeline.js";
+import { tabSrcToSections, stripNotationStaff } from "../../src/dsl/pipeline.js";
 
 const SRC = `mode: tab
 meter: 4/4
@@ -12,7 +11,6 @@ tuning: e B G D A E
 
 [Verse]
 L: Ka-tie  don't   cry     I       know            you're  try-ing your    har-    dest
-e: --------------------------------|--------------------------------|--------------------------------|--------------------------------
 B: 7-------7-------7-------7-------|7-------7-----------------------|3-------3-------3-------3-------|--------------------------------
 G: 7-------7-------7-------7-------|7-------7-------6-------6-------|4-------4-------4-------4-------|6-------6-------6-------6-------
 D: ----7-------7-------7-------7---|----7-------7---7-------7-------|----4-------4-------4-------4---|7-------7-------7-------7-------
@@ -27,70 +25,38 @@ D: ----7-------7-------7-------7---|----7-------7---7-------7-------
 A: 5-------------------------------|5-------------------7-------7---
 E: --------------------------------|----------------5---------------`;
 
-const xml = tabSrcToMusicXML(SRC);
+const { sections } = tabSrcToSections(SRC);
+const labels = sections.map((s) => s.label);
 
 const mod = await createVerovioModule();
 const tk = new VerovioToolkit(mod);
-tk.setOptions({
-	inputFrom: "musicxml",
-	scale: 40,
-	adjustPageHeight: true,
-	pageWidth: 2000,
-	pageHeight: 60000,
-	header: "none",
-	footer: "none",
-	breaks: "auto",
-	spacingStaff: 2,
-});
-const ok = tk.loadData(xml);
-const svgStr = ok ? tk.renderToSVG(1) : "";
+let fail = 0;
 
-const doc = new DOMParser().parseFromString(svgStr, "image/svg+xml");
-const svg = doc.documentElement;
+console.log("section labels:", JSON.stringify(labels));
+if (labels.join(",") !== "Verse,Chorus") {
+	console.log("FAIL: expected [Verse, Chorus]");
+	fail++;
+}
 
-const count = (sel) => svg.querySelectorAll(sel).length;
-const words = ["Ka", "tie", "don't", "cry", "know", "har", "dest"];
-const beforeNotes = count("g.note");
-const beforeStaves = count("g.staff");
-const beforeVerse = count("g.verse");
-
-stripNotationStaff(svg);
-const out = svg.outerHTML;
-
-const lyricsKept = words.filter((w) => out.includes(w));
-// after strip, the first staff in each measure should have no noteheads/paths
-let staff1Notes = 0;
-let staff1Paths = 0;
-svg.querySelectorAll("g.measure").forEach((m) => {
-	const staves = Array.from(m.children).filter((c) =>
-		(c.getAttribute("class") || "").split(/\s+/).includes("staff")
-	);
-	if (staves.length < 2) return;
-	staff1Notes += staves[0].querySelectorAll("g.notehead").length;
-	staff1Paths += staves[0].querySelectorAll("path").length;
+sections.forEach((sec) => {
+	tk.setOptions({ inputFrom: "musicxml", scale: 40, adjustPageHeight: true, pageWidth: 2000, pageHeight: 60000, header: "none", footer: "none", breaks: "auto", pageMarginLeft: 50, pageMarginRight: 50, spacingStaff: 2 });
+	const ok = tk.loadData(sec.xml);
+	const svg = new DOMParser().parseFromString(ok ? tk.renderToSVG(1) : "", "image/svg+xml").documentElement;
+	const verses = svg.querySelectorAll("g.verse").length;
+	const barsBefore = svg.querySelectorAll("g.barLine").length;
+	stripNotationStaff(svg);
+	const out = svg.outerHTML;
+	const barsAfter = svg.querySelectorAll("g.barLine").length;
+	let leftover = 0;
+	svg.querySelectorAll("g.measure").forEach((m) => {
+		const st = Array.from(m.children).filter((c) => (c.getAttribute("class") || "").split(/\s+/).includes("staff"));
+		if (st.length >= 2) leftover += st[0].querySelectorAll("g.notehead, path").length;
+	});
+	const tab = /tabGrp|tabDurSym/.test(out);
+	const good = ok && verses > 0 && tab && leftover === 0 && barsAfter > barsBefore;
+	if (!good) fail++;
+	console.log(`  [${sec.label}] load=${ok} verses=${verses} tab=${tab} leftover=${leftover} barlines ${barsBefore}->${barsAfter} (left added) ${good ? "OK" : "FAIL"}`);
 });
 
-// section labels in MusicXML and surviving the strip
-const sectionsInXml = /<words[^>]*>Verse<\/words>/.test(xml) && /<words[^>]*>Chorus<\/words>/.test(xml);
-const sectionsKept = out.includes("Verse") && out.includes("Chorus");
-// barlines trimmed: no barline path should start above the tab staff. Check the
-// min barline-top is below the min lyric y (rough proxy that they were lowered).
-const barTops = [...out.matchAll(/class="barLine"[\s\S]*?<path d="M[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
-
-console.log("loaded:", ok, "pages:", tk.getPageCount());
-console.log("before  -> staves:", beforeStaves, "notes:", beforeNotes, "verses:", beforeVerse);
-console.log("lyrics kept after strip:", lyricsKept.join(",") || "(none)");
-console.log("tab markup present:", /tabGrp|tabDurSym/.test(out));
-console.log("staff1 leftover noteheads:", staff1Notes, "paths:", staff1Paths);
-console.log("sections in xml:", sectionsInXml, "| sections kept after strip:", sectionsKept);
-console.log("barline count:", barTops.length);
-const pass =
-	ok &&
-	lyricsKept.length >= 4 &&
-	/tabGrp|tabDurSym/.test(out) &&
-	staff1Notes === 0 &&
-	staff1Paths === 0 &&
-	sectionsInXml &&
-	sectionsKept;
-console.log(pass ? "PIPELINE OK" : "PIPELINE FAIL");
-process.exitCode = pass ? 0 : 1;
+console.log(fail ? "\nPIPELINE FAIL" : "\nPIPELINE OK");
+process.exitCode = fail ? 1 : 0;
