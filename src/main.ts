@@ -20,7 +20,7 @@ interface MusicNotationSettings {
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
 	scale: 40,
-	spacing: 140,
+	spacing: 110,
 };
 
 type InputFormat = "musicxml" | "abc";
@@ -40,6 +40,8 @@ export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
 	/** Verovio toolkit is created once (WASM init is expensive) and reused. */
 	private toolkit: Promise<VerovioToolkit> | null = null;
+	private rafId = 0;
+	private saveTimer = 0;
 
 	async onload() {
 		await this.loadSettings();
@@ -70,63 +72,150 @@ export default class MusicNotationPlugin extends Plugin {
 		_ctx: MarkdownPostProcessorContext
 	) {
 		const container = el.createDiv({ cls: "music-notation" });
+		const controls = container.createDiv({ cls: "music-notation-controls" });
+		const target = container.createDiv({ cls: "music-notation-render" });
+
+		let tk: VerovioToolkit;
 		try {
-			const tk = await this.getToolkit();
-
-			// pageWidth is in Verovio units; derive from the rendered block width
-			// so the score fills the note column. Fall back to a sensible width
-			// before layout (clientWidth can be 0 on first paint).
-			const px = container.clientWidth || el.clientWidth || 800;
-			const f = this.settings.spacing / 100;
-			tk.setOptions({
-				inputFrom: detectFormat(source),
-				scale: this.settings.scale,
-				adjustPageHeight: true,
-				pageWidth: Math.round((px * 100) / this.settings.scale),
-				// Spread notes/lyrics horizontally. Verovio defaults: linear 0.25,
-				// non-linear 0.6 (both capped at 1). Scale by the user's factor.
-				spacingLinear: Math.min(1, 0.25 * f),
-				spacingNonLinear: Math.min(1, 0.6 * f),
-				// Very tall page so Verovio wraps into systems but never paginates
-				// — we only render page 1, so everything must fit on it.
-				pageHeight: 60000,
-				pageMarginLeft: 0,
-				pageMarginRight: 0,
-				pageMarginTop: 0,
-				pageMarginBottom: 0,
-				header: "none",
-				footer: "none",
-				breaks: "auto",
-				svgViewBox: true,
-			});
-
-			if (!tk.loadData(source) || tk.getPageCount() < 1) {
-				this.renderError(
-					container,
-					tk.getLog() || "Verovio could not parse this input."
-				);
-				return;
-			}
-
-			const svg = tk.renderToSVG(1);
-			const doc = new DOMParser().parseFromString(
-				svg,
-				"image/svg+xml"
-			);
-			const svgEl = doc.documentElement;
-			if (svgEl.nodeName.toLowerCase() !== "svg") {
-				this.renderError(container, "Verovio returned no SVG.");
-				return;
-			}
-			container.appendChild(svgEl);
+			tk = await this.getToolkit();
 		} catch (e) {
-			this.renderError(container, String(e));
+			this.renderError(target, String(e));
+			return;
 		}
+
+		const render = () => {
+			try {
+				const px = this.fitWidth(container, el);
+				const f = this.settings.spacing / 100;
+				tk.setOptions({
+					inputFrom: detectFormat(source),
+					scale: this.settings.scale,
+					adjustPageHeight: true,
+					pageWidth: Math.round((px * 100) / this.settings.scale),
+					// Spread notes/lyrics horizontally. Verovio defaults: linear
+					// 0.25, non-linear 0.6 (both capped at 1). Scale by the factor.
+					spacingLinear: Math.min(1, 0.25 * f),
+					spacingNonLinear: Math.min(1, 0.6 * f),
+					// Very tall page so Verovio wraps into systems but never
+					// paginates — we only render page 1, so it must all fit.
+					pageHeight: 60000,
+					pageMarginLeft: 0,
+					pageMarginRight: 0,
+					pageMarginTop: 0,
+					pageMarginBottom: 0,
+					header: "none",
+					footer: "none",
+					breaks: "auto",
+					svgViewBox: true,
+				});
+
+				if (!tk.loadData(source) || tk.getPageCount() < 1) {
+					this.renderError(
+						target,
+						tk.getLog() || "Verovio could not parse this input."
+					);
+					return;
+				}
+
+				const svg = tk.renderToSVG(1);
+				const svgEl = new DOMParser().parseFromString(
+					svg,
+					"image/svg+xml"
+				).documentElement;
+				target.empty();
+				if (svgEl.nodeName.toLowerCase() !== "svg") {
+					this.renderError(target, "Verovio returned no SVG.");
+					return;
+				}
+				target.appendChild(svgEl);
+			} catch (e) {
+				this.renderError(target, String(e));
+			}
+		};
+
+		this.buildControls(controls, render);
+		render();
 	}
 
-	private renderError(container: HTMLElement, message: string) {
-		container.empty();
-		container.createEl("pre", {
+	/**
+	 * In-document sliders that adjust this block's size and spacing live. They
+	 * seed from (and write back to) the global defaults so the last-used values
+	 * stick across reloads. Changes re-render only this block.
+	 */
+	private buildControls(bar: HTMLElement, render: () => void) {
+		const add = (
+			label: string,
+			key: "scale" | "spacing",
+			min: number,
+			max: number,
+			step: number
+		) => {
+			const wrap = bar.createDiv({ cls: "music-notation-control" });
+			wrap.createSpan({
+				cls: "music-notation-control-label",
+				text: label,
+			});
+			const input = wrap.createEl("input", { type: "range" });
+			input.min = String(min);
+			input.max = String(max);
+			input.step = String(step);
+			input.value = String(this.settings[key]);
+			const val = wrap.createSpan({
+				cls: "music-notation-control-val",
+				text: `${this.settings[key]}%`,
+			});
+			input.addEventListener("input", () => {
+				this.settings[key] = Number(input.value);
+				val.setText(`${input.value}%`);
+				this.scheduleSave();
+				this.scheduleRender(render);
+			});
+		};
+		add("Size", "scale", 20, 100, 5);
+		add("Spacing", "spacing", 80, 250, 10);
+	}
+
+	/**
+	 * Width the score should use. Obsidian's "Readable line length" caps the
+	 * text column well below the pane width, so a wide window otherwise does
+	 * nothing for the music. Break the block out to (most of) the pane width.
+	 * Idempotent: resets its own styles before measuring so re-renders are stable.
+	 */
+	private fitWidth(container: HTMLElement, el: HTMLElement): number {
+		container.style.width = "";
+		container.style.marginLeft = "";
+		container.style.maxWidth = "";
+		const column = container.clientWidth || el.clientWidth || 0;
+		const pane = el.closest(
+			".markdown-preview-view, .markdown-source-view, .view-content"
+		) as HTMLElement | null;
+		if (!pane || !column || column < 50) return column || 800;
+		const paneWidth = pane.clientWidth;
+		if (paneWidth <= column + 8) return column;
+		const margin = 24;
+		const gap = (paneWidth - column) / 2; // readable column is centred
+		container.style.width = `${paneWidth - margin * 2}px`;
+		container.style.marginLeft = `${-(gap - margin)}px`;
+		container.style.maxWidth = "none";
+		return paneWidth - margin * 2;
+	}
+
+	private scheduleRender(render: () => void) {
+		if (this.rafId) cancelAnimationFrame(this.rafId);
+		this.rafId = requestAnimationFrame(() => {
+			this.rafId = 0;
+			render();
+		});
+	}
+
+	private scheduleSave() {
+		clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => this.saveSettings(), 400);
+	}
+
+	private renderError(target: HTMLElement, message: string) {
+		target.empty();
+		target.createEl("pre", {
 			cls: "music-notation-error",
 			text: `Music notation error:\n${message}`,
 		});
@@ -173,7 +262,7 @@ class MusicNotationSettingTab extends PluginSettingTab {
 			)
 			.addSlider((s) =>
 				s
-					.setLimits(100, 250, 10)
+					.setLimits(80, 250, 10)
 					.setValue(this.plugin.settings.spacing)
 					.setDynamicTooltip()
 					.onChange(async (v) => {

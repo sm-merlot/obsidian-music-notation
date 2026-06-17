@@ -22,6 +22,36 @@
 	fill: var(--text-normal);
 }
 
+/* Per-block live controls (size + spacing). */
+.music-notation-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	align-items: center;
+	margin-bottom: 6px;
+	opacity: 0.35;
+	transition: opacity 120ms ease;
+}
+.music-notation:hover .music-notation-controls {
+	opacity: 1;
+}
+.music-notation-control {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+}
+.music-notation-control input[type="range"] {
+	width: 120px;
+	max-width: 40vw;
+}
+.music-notation-control-val {
+	min-width: 3.5ch;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
 .music-notation-error {
 	color: var(--text-error);
 	white-space: pre-wrap;
