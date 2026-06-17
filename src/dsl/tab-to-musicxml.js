@@ -33,6 +33,36 @@ function dotsXml(n) {
 	return "<dot/>".repeat(n);
 }
 
+// Beam roles for a bar's events: group beamable notes (eighth or shorter) that
+// fall within the same beat. Verovio honors encoded <beam>s and won't auto-beam.
+function beamRoles(events, beatFrac) {
+	const n = events.length;
+	const beamable = events.map((e) => e.durFrac <= 0.125 + 1e-9);
+	const beat = [];
+	let pos = 0;
+	for (const e of events) {
+		beat.push(Math.floor(pos / beatFrac + 1e-6));
+		pos += e.durFrac;
+	}
+	const roles = new Array(n).fill(null);
+	let i = 0;
+	while (i < n) {
+		if (!beamable[i]) {
+			i++;
+			continue;
+		}
+		let j = i;
+		while (j + 1 < n && beamable[j + 1] && beat[j + 1] === beat[i]) j++;
+		if (j > i) {
+			roles[i] = "begin";
+			for (let k = i + 1; k < j; k++) roles[k] = "continue";
+			roles[j] = "end";
+		}
+		i = j + 1;
+	}
+	return roles;
+}
+
 // Syllabification across the whole stream: a trailing '-' means the word
 // continues; track the previous syllable to pick begin/middle/end/single.
 function makeSyllabifier() {
@@ -57,10 +87,11 @@ export function tabToMusicXML(model) {
 		for (const bar of sys.bars) measures.push(bar);
 	}
 
-	// Link connectors: a note's `conn` ties/slurs it back to the previous note
-	// on the same string. '^' = tie; h/p/s/slashes = slur (legato line in tab).
+	// Link connectors: a note's `conn` connects it back to the previous note on
+	// the same string. '^' = tie; h/p = slur (hammer-on/pull-off); s / \ = slide
+	// (a line drawn between the two frets).
 	const lastByString = new Map();
-	let slurN = 0;
+	let lineN = 0;
 	for (const bar of measures) {
 		for (const e of bar.events) {
 			for (const n of e.notes) {
@@ -70,9 +101,10 @@ export function tabToMusicXML(model) {
 						prev.tieStart = true;
 						n.tieStop = true;
 					} else {
-						const num = ++slurN;
-						(prev.slurStart ||= []).push(num);
-						(n.slurStop ||= []).push(num);
+						const num = ++lineN;
+						const kind = "hp".includes(n.conn) ? "slur" : "slide";
+						(prev[kind + "Start"] ||= []).push(num);
+						(n[kind + "Stop"] ||= []).push(num);
 					}
 				}
 				lastByString.set(n.stringNum, n);
@@ -105,30 +137,35 @@ export function tabToMusicXML(model) {
 				`<staff>1</staff>${lyric}</note>`;
 		}
 		let v2 = "";
-		for (const e of bar.events) {
+		const roles = beamRoles(bar.events, 1 / d.beatType);
+		bar.events.forEach((e, ei) => {
 			const { type, dots, div } = durParts(e.durFrac);
+			const beam =
+				roles[ei] ? `<beam number="1">${roles[ei]}</beam>` : "";
 			e.notes.forEach((n, i) => {
 				const alter = n.alter ? `<alter>${n.alter}</alter>` : "";
-				// <tie> (sound) goes after duration; <tied>/<slur> (visual) in
-				// <notations>.
+				// <tie> (sound) goes after duration; <tied>/<slur>/<slide>
+				// (visual) in <notations>. <beam> goes on the first note only.
 				const tieEl =
 					(n.tieStart ? '<tie type="start"/>' : "") +
 					(n.tieStop ? '<tie type="stop"/>' : "");
 				const tied =
 					(n.tieStart ? '<tied type="start"/>' : "") +
 					(n.tieStop ? '<tied type="stop"/>' : "");
-				const slurs = [
+				const lines = [
 					...(n.slurStart || []).map((x) => `<slur type="start" number="${x}"/>`),
 					...(n.slurStop || []).map((x) => `<slur type="stop" number="${x}"/>`),
+					...(n.slideStart || []).map((x) => `<slide type="start" line-type="solid" number="${x}"/>`),
+					...(n.slideStop || []).map((x) => `<slide type="stop" line-type="solid" number="${x}"/>`),
 				].join("");
 				v2 +=
 					`<note>${i > 0 ? "<chord/>" : ""}` +
 					`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
 					`<duration>${div}</duration>${tieEl}<voice>2</voice><type>${type}</type>${dotsXml(dots)}` +
-					`<staff>2</staff>` +
-					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical>${tied}${slurs}</notations></note>`;
+					`<staff>2</staff>${i === 0 ? beam : ""}` +
+					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical>${tied}${lines}</notations></note>`;
 			});
-		}
+		});
 		const backupXml = `<backup><duration>${backup}</duration></backup>`;
 		return `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${v1}${backupXml}${v2}</measure>`;
 	});
