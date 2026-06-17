@@ -9,6 +9,32 @@ no watermark.
 
 ## Usage
 
+### `music` — friendly DSL (recommended)
+
+A `music` block with a short directive header. `mode: tab` engraves a guitar tab from
+an ASCII grid (each column = the declared `unit`), with lyrics on an `L:` row that snap
+to the nearest note. The tab reflows to screen width.
+
+````markdown
+```music
+mode: tab
+meter: 4/4
+unit: 1/32
+tuning: e B G D A E
+
+L: Ka-tie  don't   cry
+B: 7-------7-------7-------7-------|7-------7-----------------------
+G: 7-------7-------7-------7-------|7-------7-------6-------6-------
+D: ----7-------7-------7-------7---|----7-------7---7-------7-------
+A: 5-------------------------------|5-------------------7-------7---
+```
+````
+
+`mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano). The
+`chords` mode (chord-over-lyric) is coming.
+
+### `music-verovio` — raw escape hatch
+
 Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is
 auto-detected (ABC tunes start with an `X:` header; everything else is treated as
 MusicXML).

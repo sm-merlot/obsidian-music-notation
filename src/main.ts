@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
+import { tabSrcToMusicXML, stripNotationStaff } from "./dsl/pipeline.js";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -36,6 +37,15 @@ function detectFormat(source: string): InputFormat {
 	return "musicxml";
 }
 
+/** DSL mode from an explicit `mode:` directive, else inferred from the body. */
+function dslMode(source: string): "tab" | "chords" | "notation" {
+	const m = source.match(/^\s*mode\s*:\s*(tab|chords|notation)\s*$/im);
+	if (m) return m[1].toLowerCase() as "tab" | "chords" | "notation";
+	if (/^\s*[eEABDGL]\s*[|:]/m.test(source)) return "tab";
+	if (/^\s*[XK]:/m.test(source)) return "notation";
+	return "tab";
+}
+
 export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
 	/** Verovio toolkit is created once (WASM init is expensive) and reused. */
@@ -46,10 +56,41 @@ export default class MusicNotationPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new MusicNotationSettingTab(this.app, this));
+		// `music` = the friendly DSL (tab / notation). `music-verovio` = raw
+		// MusicXML/ABC straight to the engine (escape hatch / debugging).
+		this.registerMarkdownCodeBlockProcessor("music", (source, el, ctx) =>
+			this.renderBlock(source, el, ctx, true)
+		);
 		this.registerMarkdownCodeBlockProcessor(
 			"music-verovio",
-			(source, el, ctx) => this.renderBlock(source, el, ctx)
+			(source, el, ctx) => this.renderBlock(source, el, ctx, false)
 		);
+	}
+
+	/**
+	 * Turn block source into what Verovio should load. Raw blocks pass through;
+	 * DSL blocks are compiled by mode (tab → 2-staff MusicXML that needs the
+	 * notation staff stripped from the SVG; notation → ABC/MusicXML as-is).
+	 */
+	private prepare(source: string, dsl: boolean): {
+		inputFrom: InputFormat;
+		data: string;
+		strip: boolean;
+	} {
+		if (!dsl) {
+			return { inputFrom: detectFormat(source), data: source, strip: false };
+		}
+		const mode = dslMode(source);
+		if (mode === "tab") {
+			return { inputFrom: "musicxml", data: tabSrcToMusicXML(source), strip: true };
+		}
+		if (mode === "notation") {
+			const body = source
+				.replace(/^\s*(mode|title|meter|unit|tuning|capo)\s*:.*$/gim, "")
+				.trim();
+			return { inputFrom: detectFormat(body), data: body, strip: false };
+		}
+		throw new Error(`'${mode}' mode is not implemented yet.`);
 	}
 
 	/**
@@ -69,7 +110,8 @@ export default class MusicNotationPlugin extends Plugin {
 	private async renderBlock(
 		source: string,
 		el: HTMLElement,
-		_ctx: MarkdownPostProcessorContext
+		_ctx: MarkdownPostProcessorContext,
+		dsl: boolean
 	) {
 		const container = el.createDiv({ cls: "music-notation" });
 		const controls = container.createDiv({ cls: "music-notation-controls" });
@@ -85,10 +127,11 @@ export default class MusicNotationPlugin extends Plugin {
 
 		const render = () => {
 			try {
+				const { inputFrom, data, strip } = this.prepare(source, dsl);
 				const px = this.fitWidth(container, el);
 				const f = this.settings.spacing / 100;
 				tk.setOptions({
-					inputFrom: detectFormat(source),
+					inputFrom,
 					scale: this.settings.scale,
 					adjustPageHeight: true,
 					pageWidth: Math.round((px * 100) / this.settings.scale),
@@ -96,6 +139,9 @@ export default class MusicNotationPlugin extends Plugin {
 					// 0.25, non-linear 0.6 (both capped at 1). Scale by the factor.
 					spacingLinear: Math.min(1, 0.25 * f),
 					spacingNonLinear: Math.min(1, 0.6 * f),
+					// Tab carries lyrics on a hidden staff that gets stripped;
+					// pull the staves tight so the leftover band is small.
+					spacingStaff: strip ? 2 : 12,
 					// Very tall page so Verovio wraps into systems but never
 					// paginates — we only render page 1, so it must all fit.
 					pageHeight: 60000,
@@ -109,7 +155,7 @@ export default class MusicNotationPlugin extends Plugin {
 					svgViewBox: true,
 				});
 
-				if (!tk.loadData(source) || tk.getPageCount() < 1) {
+				if (!tk.loadData(data) || tk.getPageCount() < 1) {
 					this.renderError(
 						target,
 						tk.getLog() || "Verovio could not parse this input."
@@ -127,6 +173,7 @@ export default class MusicNotationPlugin extends Plugin {
 					this.renderError(target, "Verovio returned no SVG.");
 					return;
 				}
+				if (strip) stripNotationStaff(svgEl);
 				target.appendChild(svgEl);
 			} catch (e) {
 				this.renderError(target, String(e));
