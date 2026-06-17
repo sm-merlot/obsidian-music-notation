@@ -82,14 +82,29 @@ export function stripNotationStaff(svg) {
 	// Harmony renders above the (now removed) notation staff, far above the
 	// lyrics. Pull each system's chord symbols down to just above its lyric row.
 	svg.querySelectorAll("g.system").forEach((sys) => {
+		if (!sys.querySelector("g.harm")) return;
 		let lyrY = Infinity;
 		sys.querySelectorAll("g.verse text").forEach((t) => {
 			const y = parseFloat(t.getAttribute("y"));
 			if (!Number.isNaN(y) && y < lyrY) lyrY = y;
 		});
-		if (!Number.isFinite(lyrY)) return;
-		sys.querySelectorAll("g.harm text").forEach((t) => {
-			t.setAttribute("y", (lyrY - CHORD_GAP).toFixed(1));
+		let chordY;
+		if (Number.isFinite(lyrY)) {
+			chordY = lyrY - CHORD_GAP; // sit just above the lyric row
+		} else {
+			// no lyrics: anchor above the tab staff (and its rhythm stems)
+			const measure = sys.querySelector("g.measure");
+			const staves = measure
+				? Array.from(measure.children).filter((c) => hasClass(c, "staff"))
+				: [];
+			const tabTop = staves.length ? staffTopY(staves[staves.length - 1]) : null;
+			if (tabTop == null) return;
+			chordY = tabTop - CHORD_GAP - 320;
+		}
+		const newY = chordY.toFixed(1);
+		// the chord glyph carries y on the <text> AND an inner <tspan>; move both
+		sys.querySelectorAll("g.harm text, g.harm tspan").forEach((t) => {
+			if (t.hasAttribute("y")) t.setAttribute("y", newY);
 		});
 	});
 
@@ -109,7 +124,7 @@ const BOT_PAD = 160;
 const TEXT_ASCENT = 400;
 const TEXT_DESCENT = 140;
 // Distance the chord row sits above the lyric baseline.
-const CHORD_GAP = 430;
+const CHORD_GAP = 380;
 
 function compactSystems(svg) {
 	const inner = svg.querySelector("svg"); // the definition-scale (raw-coord) svg
@@ -151,7 +166,7 @@ function contentBox(sys) {
 		const d = p.getAttribute("d") || "";
 		for (const m of d.matchAll(/[ML]\s*-?[\d.]+\s+(-?[\d.]+)/g)) acc(Number(m[1]));
 	});
-	sys.querySelectorAll("text").forEach((t) => {
+	sys.querySelectorAll("text, tspan").forEach((t) => {
 		const y = parseFloat(t.getAttribute("y"));
 		if (!Number.isNaN(y)) {
 			acc(y - TEXT_ASCENT);
