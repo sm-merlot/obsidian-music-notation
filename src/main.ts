@@ -237,14 +237,22 @@ export default class MusicNotationPlugin extends Plugin {
 			".markdown-preview-view, .markdown-source-view, .view-content"
 		) as HTMLElement | null;
 		if (!pane || !column || column < 50) return column || 800;
-		const paneWidth = pane.clientWidth;
-		if (paneWidth <= column + 8) return column;
-		const margin = 24;
-		const gap = (paneWidth - column) / 2; // readable column is centred
-		container.style.width = `${paneWidth - margin * 2}px`;
-		container.style.marginLeft = `${-(gap - margin)}px`;
+		const cs = getComputedStyle(pane);
+		const padL = parseFloat(cs.paddingLeft) || 0;
+		const padR = parseFloat(cs.paddingRight) || 0;
+		const inner = pane.clientWidth - padL - padR;
+		if (inner <= column + 8) return column;
+		// Shift the block left so its left edge sits exactly at the pane's content
+		// edge, then stretch to the full inner width. Exact (rect-based) offset —
+		// no centring assumptions — so the controls/first bar aren't clipped.
+		const offset =
+			container.getBoundingClientRect().left -
+			pane.getBoundingClientRect().left -
+			padL;
+		container.style.width = `${inner}px`;
+		container.style.marginLeft = `${-offset}px`;
 		container.style.maxWidth = "none";
-		return paneWidth - margin * 2;
+		return inner;
 	}
 
 	private scheduleRender(render: () => void) {

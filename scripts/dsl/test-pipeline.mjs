@@ -17,7 +17,15 @@ B: 7-------7-------7-------7-------|7-------7-----------------------|3-------3--
 G: 7-------7-------7-------7-------|7-------7-------6-------6-------|4-------4-------4-------4-------|6-------6-------6-------6-------
 D: ----7-------7-------7-------7---|----7-------7---7-------7-------|----4-------4-------4-------4---|7-------7-------7-------7-------
 A: 5-------------------------------|5-------------------7-------7---|2-------------------------------|----7-------7-------7-------7---
-E: --------------------------------|----------------5---------------|--------------------------------|5-------------------------------`;
+E: --------------------------------|----------------5---------------|--------------------------------|5-------------------------------
+
+[Chorus]
+L: Lets not pre-tend
+B: 7-------7-------7-------7-------|7-------7-----------------------
+G: 7-------7-------7-------7-------|7-------7-------6-------6-------
+D: ----7-------7-------7-------7---|----7-------7---7-------7-------
+A: 5-------------------------------|5-------------------7-------7---
+E: --------------------------------|----------------5---------------`;
 
 const xml = tabSrcToMusicXML(SRC);
 
@@ -62,16 +70,27 @@ svg.querySelectorAll("g.measure").forEach((m) => {
 	staff1Paths += staves[0].querySelectorAll("path").length;
 });
 
+// section labels in MusicXML and surviving the strip
+const sectionsInXml = /<words[^>]*>Verse<\/words>/.test(xml) && /<words[^>]*>Chorus<\/words>/.test(xml);
+const sectionsKept = out.includes("Verse") && out.includes("Chorus");
+// barlines trimmed: no barline path should start above the tab staff. Check the
+// min barline-top is below the min lyric y (rough proxy that they were lowered).
+const barTops = [...out.matchAll(/class="barLine"[\s\S]*?<path d="M[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
+
 console.log("loaded:", ok, "pages:", tk.getPageCount());
 console.log("before  -> staves:", beforeStaves, "notes:", beforeNotes, "verses:", beforeVerse);
 console.log("lyrics kept after strip:", lyricsKept.join(",") || "(none)");
 console.log("tab markup present:", /tabGrp|tabDurSym/.test(out));
 console.log("staff1 leftover noteheads:", staff1Notes, "paths:", staff1Paths);
+console.log("sections in xml:", sectionsInXml, "| sections kept after strip:", sectionsKept);
+console.log("barline count:", barTops.length);
 const pass =
 	ok &&
 	lyricsKept.length >= 4 &&
 	/tabGrp|tabDurSym/.test(out) &&
 	staff1Notes === 0 &&
-	staff1Paths === 0;
+	staff1Paths === 0 &&
+	sectionsInXml &&
+	sectionsKept;
 console.log(pass ? "PIPELINE OK" : "PIPELINE FAIL");
 process.exitCode = pass ? 0 : 1;
