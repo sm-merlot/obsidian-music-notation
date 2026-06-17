@@ -184,8 +184,13 @@ export function parseTab(src) {
 				const tl = tuningLabels[idx];
 				open = DEFAULT_OPEN[tl] ?? DEFAULT_OPEN[tl.toUpperCase()] ?? open;
 			}
-			// tolerate a trailing barline (raw tabs end each line with '|')
-			const content = sl.content.replace(/\|\s*$/, "");
+			// sanitize raw-tab noise: {annotations}, a trailing repeat marker
+			// (` x2`), and a trailing barline; technique chars (h/p/b/s and
+			// slashes) are left in place — onsetsFor only reads digit runs.
+			const content = sl.content
+				.replace(/\{[^}]*\}/g, "")
+				.replace(/\s+x\d+\s*$/i, "")
+				.replace(/\|\s*$/, "");
 			return { label, num, open, bars: content.split("|") };
 		});
 		// align bar count
