@@ -79,6 +79,20 @@ export function stripNotationStaff(svg) {
 		});
 	});
 
+	// Harmony renders above the (now removed) notation staff, far above the
+	// lyrics. Pull each system's chord symbols down to just above its lyric row.
+	svg.querySelectorAll("g.system").forEach((sys) => {
+		let lyrY = Infinity;
+		sys.querySelectorAll("g.verse text").forEach((t) => {
+			const y = parseFloat(t.getAttribute("y"));
+			if (!Number.isNaN(y) && y < lyrY) lyrY = y;
+		});
+		if (!Number.isFinite(lyrY)) return;
+		sys.querySelectorAll("g.harm text").forEach((t) => {
+			t.setAttribute("y", (lyrY - CHORD_GAP).toFixed(1));
+		});
+	});
+
 	// The stripped notation staff still reserved its full height, leaving a big
 	// empty band above the lyrics/tab in every system. Re-stack the systems by
 	// their real content (lyrics, tab, stems) and shrink the viewBox to fit.
@@ -94,6 +108,8 @@ const BOT_PAD = 160;
 // Approx glyph extent above/below a text baseline, so lyrics/chords aren't clipped.
 const TEXT_ASCENT = 400;
 const TEXT_DESCENT = 140;
+// Distance the chord row sits above the lyric baseline.
+const CHORD_GAP = 430;
 
 function compactSystems(svg) {
 	const inner = svg.querySelector("svg"); // the definition-scale (raw-coord) svg

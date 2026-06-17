@@ -12,7 +12,7 @@ no watermark.
 ### `music` — friendly DSL (recommended)
 
 A `music` block with a short directive header. `mode: tab` engraves a guitar tab from
-an ASCII grid (each column = the declared `unit`), with an `L:` lyric row and a `ch:`
+an ASCII grid (each column = the declared `unit`), with an `L:` lyric row and a `H:`
 chord row (chord symbols, incl. jazz extensions like `Cmaj7#11`, `Cm7b5`, `G/B`). Both
 rows align by column — type them above the grid; tokens snap to the nearest note. The
 tab reflows to screen width.
@@ -24,7 +24,7 @@ meter: 4/4
 unit: 1/32
 tuning: e B G D A E
 
-ch: D                               G
+H: D                               G
 L:  Ka-tie  don't   cry
 B:  7-------7-------7-------7-------|7-------7-----------------------
 G:  7-------7-------7-------7-------|7-------7-------6-------6-------

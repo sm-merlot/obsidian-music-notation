@@ -107,10 +107,10 @@ function eventsForBar(strings, unitFrac, colsPerBar) {
 
 // A grid row: a label then `:` or `|` then content. Single-letter labels are
 // strings (e/B/G/D/A/E, case distinguishes high/low E); `L` = aligned lyric row;
-// `ch` = aligned chord row. Both lyric & chord tokens align to the grid columns.
+// `H` (harmony) = aligned chord row. Both lyric & chord tokens align to columns.
 const ROW_LINE = /^\s*([A-Za-z]+)\s*[|:]\s?(.*)$/;
 const isLyricLabel = (s) => s === "L" || s === "l";
-const isChordLabel = (s) => /^(ch|chord|chords)$/i.test(s);
+const isChordLabel = (s) => s === "H" || /^chords?$/i.test(s);
 
 // Extract syllables from one bar of an aligned lyric row: each whitespace-
 // delimited token is a syllable at its start column. Leading/trailing '-' marks
@@ -171,7 +171,10 @@ export function parseTab(src) {
 			const lyricRow = rows.find((r) => isLyricLabel(r.label));
 			const chordRow = rows.find((r) => isChordLabel(r.label));
 			const stringLines = rows.filter(
-				(r) => r.label.length === 1 && !isLyricLabel(r.label)
+				(r) =>
+					r.label.length === 1 &&
+					!isLyricLabel(r.label) &&
+					!isChordLabel(r.label)
 			);
 			systems.push({
 				section: curSection,
