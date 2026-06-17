@@ -13,8 +13,13 @@ function hasClass(el, c) {
 	);
 }
 
-export function stripNotationStaff(svg) {
+export function stripNotationStaff(svg, connections) {
 	const rm = (el) => el && el.parentNode && el.parentNode.removeChild(el);
+
+	// Draw slide/hammer/pull as a small letter in the gap between the two frets
+	// (Verovio renders none of these usefully in tab). Done before compaction so
+	// the labels move with their system.
+	if (connections && connections.length) drawConnectors(svg, connections);
 
 	// System brace, part label and floating measure numbers look wrong once the
 	// notation staff is gone.
@@ -177,6 +182,29 @@ function contentBox(sys) {
 		}
 	});
 	return top === Infinity ? null : { top, bot };
+}
+
+// Place a small italic letter (h/p/s) in the gap just above the string line,
+// centred between the two connected fret numbers.
+function drawConnectors(svg, connections) {
+	const NS = "http://www.w3.org/2000/svg";
+	for (const c of connections) {
+		const a = svg.querySelector(`g.note[id="${c.a}"] text`);
+		const b = svg.querySelector(`g.note[id="${c.b}"] text`);
+		if (!a || !b) continue;
+		const xa = parseFloat(a.getAttribute("x"));
+		const xb = parseFloat(b.getAttribute("x"));
+		const y = parseFloat(a.getAttribute("y"));
+		if ([xa, xb, y].some(Number.isNaN)) continue;
+		const t = svg.ownerDocument.createElementNS(NS, "text");
+		t.setAttribute("x", ((xa + xb) / 2).toFixed(1));
+		t.setAttribute("y", (y - 95).toFixed(1)); // up into the gap, off the line
+		t.setAttribute("text-anchor", "middle");
+		t.setAttribute("font-size", "190");
+		t.setAttribute("font-style", "italic");
+		t.textContent = c.label;
+		a.parentNode.appendChild(t);
+	}
 }
 
 // A straight two-point line path: "M x y L x y".

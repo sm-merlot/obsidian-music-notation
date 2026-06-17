@@ -112,24 +112,25 @@ export function tabToMusicXML(model) {
 		for (const bar of sys.bars) measures.push(bar);
 	}
 
-	// Link connectors: a note's `conn` connects it back to the previous note on
-	// the same string. '^' = tie; h/p = slur (hammer-on/pull-off); s / \ = slide
-	// (a line drawn between the two frets).
+	// Assign every tab note a stable id (in serialization order) and link
+	// connectors to the previous note on the same string. '^' = tie (rendered by
+	// Verovio). s = slide, h/p = hammer/pull — Verovio renders neither usefully
+	// in tab, so we record them and draw the lines/arcs ourselves on the SVG.
+	const connections = [];
 	const lastByString = new Map();
-	let lineN = 0;
+	let tid = 0;
 	for (const bar of measures) {
 		for (const e of bar.events) {
 			for (const n of e.notes) {
+				n.id = "t" + tid++;
 				const prev = lastByString.get(n.stringNum);
 				if (n.conn && prev) {
 					if (n.conn === "^") {
 						prev.tieStart = true;
 						n.tieStop = true;
 					} else {
-						const num = ++lineN;
-						const kind = n.conn === "s" ? "slide" : "slur";
-						(prev[kind + "Start"] ||= []).push(num);
-						(n[kind + "Stop"] ||= []).push(num);
+						// h/p/s drawn as a small letter between the two frets.
+						connections.push({ a: prev.id, b: n.id, label: n.conn });
 					}
 				}
 				lastByString.set(n.stringNum, n);
@@ -170,35 +171,31 @@ export function tabToMusicXML(model) {
 				roles[ei] ? `<beam number="1">${roles[ei]}</beam>` : "";
 			e.notes.forEach((n, i) => {
 				const alter = n.alter ? `<alter>${n.alter}</alter>` : "";
-				// <tie> (sound) goes after duration; <tied>/<slur>/<slide>
-				// (visual) in <notations>. <beam> goes on the first note only.
+				// <tie> (sound) after duration; <tied> (visual) in <notations>.
+				// <beam> on the first note only. Slides/hammers are drawn on the
+				// SVG afterwards (Verovio can't render them in tab) — hence the id.
 				const tieEl =
 					(n.tieStart ? '<tie type="start"/>' : "") +
 					(n.tieStop ? '<tie type="stop"/>' : "");
 				const tied =
 					(n.tieStart ? '<tied type="start"/>' : "") +
 					(n.tieStop ? '<tied type="stop"/>' : "");
-				const lines = [
-					...(n.slurStart || []).map((x) => `<slur type="start" number="${x}"/>`),
-					...(n.slurStop || []).map((x) => `<slur type="stop" number="${x}"/>`),
-					...(n.slideStart || []).map((x) => `<slide type="start" line-type="solid" number="${x}"/>`),
-					...(n.slideStop || []).map((x) => `<slide type="stop" line-type="solid" number="${x}"/>`),
-				].join("");
 				v2 +=
-					`<note>${i > 0 ? "<chord/>" : ""}` +
+					`<note id="${n.id}">${i > 0 ? "<chord/>" : ""}` +
 					`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
 					`<duration>${div}</duration>${tieEl}<voice>2</voice><type>${type}</type>${dotsXml(dots)}` +
 					`<staff>2</staff>${i === 0 ? beam : ""}` +
-					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical>${tied}${lines}</notations></note>`;
+					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical>${tied}</notations></note>`;
 			});
 		});
 		const backupXml = `<backup><duration>${backup}</duration></backup>`;
 		return `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${v1}${backupXml}${v2}</measure>`;
 	});
 
-	return `<?xml version="1.0" encoding="UTF-8"?>
+	const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name></part-name></score-part></part-list>
   <part id="P1">${parts.join("")}</part>
 </score-partwise>`;
+	return { xml, connections };
 }

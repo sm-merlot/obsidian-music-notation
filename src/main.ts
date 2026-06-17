@@ -138,7 +138,9 @@ export default class MusicNotationPlugin extends Plugin {
 								text: sec.label,
 							});
 						}
-						target.appendChild(this.renderSvg(tk, sec.xml, "musicxml", px, true));
+						target.appendChild(
+							this.renderSvg(tk, sec.xml, "musicxml", px, true, sec.connections)
+						);
 					}
 				} else {
 					const { inputFrom, data, strip } = this.prepare(source, dsl);
@@ -159,7 +161,8 @@ export default class MusicNotationPlugin extends Plugin {
 		data: string,
 		inputFrom: InputFormat,
 		px: number,
-		strip: boolean
+		strip: boolean,
+		connections?: unknown
 	): SVGElement {
 		const f = this.settings.spacing / 100;
 		tk.setOptions({
@@ -198,7 +201,7 @@ export default class MusicNotationPlugin extends Plugin {
 		if (svgEl.nodeName.toLowerCase() !== "svg") {
 			throw new Error("Verovio returned no SVG.");
 		}
-		if (strip) stripNotationStaff(svgEl);
+		if (strip) stripNotationStaff(svgEl, connections);
 		return svgEl;
 	}
 

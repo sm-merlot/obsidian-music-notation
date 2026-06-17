@@ -6,7 +6,7 @@ export { stripNotationStaff };
 
 /** Tab DSL source -> 2-staff MusicXML string (whole piece, one render). */
 export function tabSrcToMusicXML(src) {
-	return tabToMusicXML(parseTab(src));
+	return tabToMusicXML(parseTab(src)).xml;
 }
 
 /**
@@ -26,9 +26,12 @@ export function tabSrcToSections(src) {
 	}
 	return {
 		directives: model.directives,
-		sections: groups.map((g) => ({
-			label: g.label,
-			xml: tabToMusicXML({ directives: model.directives, systems: g.systems }),
-		})),
+		sections: groups.map((g) => {
+			const { xml, connections } = tabToMusicXML({
+				directives: model.directives,
+				systems: g.systems,
+			});
+			return { label: g.label, xml, connections };
+		}),
 	};
 }
