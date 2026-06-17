@@ -1,14 +1,13 @@
 {
 	"name": "obsidian-music-notation",
-	"version": "0.1.0",
-	"description": "Obsidian plugin: staff, guitar tab, chords and lyrics in one sheet via alphaTab.",
+	"version": "0.2.0",
+	"description": "Obsidian plugin: staff, guitar tab, chords and lyrics in one sheet via Verovio.",
 	"main": "main.js",
 	"scripts": {
-		"gen-font": "node scripts/gen-font.mjs",
-		"dev": "npm run gen-font && node esbuild.config.mjs",
-		"build": "npm run gen-font && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
 	},
-	"keywords": ["obsidian", "music", "tab", "notation", "alphatab", "guitar"],
+	"keywords": ["obsidian", "music", "tab", "notation", "verovio", "guitar"],
 	"author": "sm-merlot",
 	"license": "MIT",
 	"devDependencies": {
@@ -19,6 +18,6 @@
 		"typescript": "^5.4.5"
 	},
 	"dependencies": {
-		"@coderline/alphatab": "^1.3.1"
+		"verovio": "^6.2.0"
 	}
 }

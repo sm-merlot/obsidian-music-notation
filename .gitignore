@@ -2,4 +2,3 @@ node_modules/
 main.js
 *.js.map
 data.json
-src/bravura-font.ts

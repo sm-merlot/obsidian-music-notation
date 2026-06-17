@@ -5,64 +5,57 @@ import {
 	Setting,
 	MarkdownPostProcessorContext,
 } from "obsidian";
-import * as alphaTab from "@coderline/alphatab";
-import { BRAVURA_WOFF2_BASE64 } from "./bravura-font";
-
-type StaveChoice = "scoretab" | "tab" | "score";
+import createVerovioModule from "verovio/wasm";
+import { VerovioToolkit } from "verovio/esm";
 
 interface MusicNotationSettings {
+	/** Verovio render scale (percent). 40 is a sensible default for notes. */
 	scale: number;
-	enablePlayer: boolean;
-	staveProfile: StaveChoice;
-	showChordDiagrams: boolean;
 }
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
-	scale: 1.0,
-	enablePlayer: false,
-	staveProfile: "scoretab",
-	showChordDiagrams: true,
+	scale: 40,
 };
 
-function staveProfileFor(choice: StaveChoice): alphaTab.StaveProfile {
-	switch (choice) {
-		case "tab":
-			return alphaTab.StaveProfile.Tab;
-		case "score":
-			return alphaTab.StaveProfile.Score;
-		default:
-			return alphaTab.StaveProfile.ScoreTab;
-	}
-}
+type InputFormat = "musicxml" | "abc";
 
-const FONT_DATA_URL = `data:font/woff2;base64,${BRAVURA_WOFF2_BASE64}`;
+/**
+ * Decide which format Verovio should parse. MusicXML is XML (starts with "<",
+ * after any prolog/comment); ABC tunes start with an "X:" reference-number
+ * header line. Default to MusicXML.
+ */
+function detectFormat(source: string): InputFormat {
+	const trimmed = source.trimStart();
+	if (/^X:/m.test(trimmed) && !trimmed.startsWith("<")) return "abc";
+	return "musicxml";
+}
 
 export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
-	private fontReady: Promise<void> | null = null;
+	/** Verovio toolkit is created once (WASM init is expensive) and reused. */
+	private toolkit: Promise<VerovioToolkit> | null = null;
 
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new MusicNotationSettingTab(this.app, this));
 		this.registerMarkdownCodeBlockProcessor(
-			"alphatab",
+			"music-verovio",
 			(source, el, ctx) => this.renderBlock(source, el, ctx)
 		);
 	}
 
 	/**
-	 * alphaTab draws notation from the Bravura SMuFL font. We embed it as base64
-	 * and register it under alphaTab's expected family name ("alphaTab") via the
-	 * FontFace API — no file fetch, so it works inside Obsidian's sandbox and the
-	 * plugin ships as just main.js + manifest.json + styles.css (BRAT-friendly).
+	 * Lazily boot Verovio. The WASM module (with the Gootville SMuFL font) is
+	 * bundled into main.js, so there is no file fetch — it works inside
+	 * Obsidian's sandbox and offline. One toolkit serves every block.
 	 */
-	private ensureFont(): Promise<void> {
-		if (this.fontReady) return this.fontReady;
-		const face = new FontFace("alphaTab", `url(${FONT_DATA_URL})`);
-		this.fontReady = face.load().then((loaded) => {
-			(document.fonts as unknown as Set<FontFace>).add(loaded);
-		});
-		return this.fontReady;
+	private getToolkit(): Promise<VerovioToolkit> {
+		if (!this.toolkit) {
+			this.toolkit = createVerovioModule().then(
+				(module) => new VerovioToolkit(module)
+			);
+		}
+		return this.toolkit;
 	}
 
 	private async renderBlock(
@@ -72,110 +65,59 @@ export default class MusicNotationPlugin extends Plugin {
 	) {
 		const container = el.createDiv({ cls: "music-notation" });
 		try {
-			await this.ensureFont();
+			const tk = await this.getToolkit();
 
-			const settings = new alphaTab.Settings();
-			settings.core.engine = "svg";
-			settings.core.useWorkers = false;
-			// Font is already registered via FontFace; tell alphaTab not to fetch.
-			settings.core.fontDirectory = null;
-			settings.core.smuflFontSources = new Map([
-				[alphaTab.FontFileFormat.Woff2, FONT_DATA_URL],
-			]);
-			settings.display.scale = this.settings.scale;
-			settings.player.enablePlayer = this.settings.enablePlayer;
-			// Default staves for blocks that don't set \staff{...} themselves.
-			// Per-staff \staff directives in the alphaTex still override this.
-			settings.display.staveProfile = staveProfileFor(
-				this.settings.staveProfile
-			);
-			// Chord names (inline {ch}) always render; the diagram grid at the
-			// top of the score is the part that's optional.
-			settings.notation.elements.set(
-				alphaTab.NotationElement.ChordDiagrams,
-				this.settings.showChordDiagrams
-			);
-			// No dynamics (forte/piano markers) — these are lyric/tab sheets.
-			settings.notation.elements.set(
-				alphaTab.NotationElement.EffectDynamics,
-				false
-			);
-			// Hide the "Guitar / Standard Tuning" track label on every block.
-			settings.notation.elements.set(
-				alphaTab.NotationElement.TrackNames,
-				false
-			);
-			settings.notation.elements.set(
-				alphaTab.NotationElement.GuitarTuning,
-				false
-			);
-			// alphaTab packs the tempo / chord / lyric / bar-number rows tight
-			// against the staff and each other. The tempo/chord/lyric rows are
-			// "effect bands" — spread those apart (the band gaps), and add room
-			// around the system and above the staff.
-			const d = settings.display;
-			// NB: do NOT raise firstSystemPaddingTop / systemPaddingTop — they
-			// push the section-marker band down onto the chord band so the
-			// section label and chord name collapse onto the same row. Spacing
-			// between the tempo/chord/lyric rows comes from the effect-band
-			// paddings below, which don't have that side effect.
-			d.notationStaffPaddingTop = 10;
-			d.effectStaffPaddingTop = 6;
-			d.effectStaffPaddingBottom = 10;
-			d.effectBandPaddingBottom = 12;
-			d.lyricLinesPaddingBetween = 5;
+			// pageWidth is in Verovio units; derive from the rendered block width
+			// so the score fills the note column. Fall back to a sensible width
+			// before layout (clientWidth can be 0 on first paint).
+			const px = container.clientWidth || el.clientWidth || 800;
+			tk.setOptions({
+				inputFrom: detectFormat(source),
+				scale: this.settings.scale,
+				adjustPageHeight: true,
+				pageWidth: Math.round((px * 100) / this.settings.scale),
+				// Very tall page so Verovio wraps into systems but never paginates
+				// — we only render page 1, so everything must fit on it.
+				pageHeight: 60000,
+				pageMarginLeft: 0,
+				pageMarginRight: 0,
+				pageMarginTop: 0,
+				pageMarginBottom: 0,
+				header: "none",
+				footer: "none",
+				breaks: "auto",
+				svgViewBox: true,
+			});
 
-			// alphaTab draws black by default — invisible in dark themes. Paint
-			// glyphs and staff lines with the active theme's text color.
-			this.applyThemeColors(settings, container);
+			if (!tk.loadData(source) || tk.getPageCount() < 1) {
+				this.renderError(
+					container,
+					tk.getLog() || "Verovio could not parse this input."
+				);
+				return;
+			}
 
-			const api = new alphaTab.AlphaTabApi(container, settings);
-			api.error.on((e) => this.renderError(container, String(e)));
-			// alphaTab paints a "rendered by alphaTab" attribution into the SVG
-			// with no setting to disable it. Strip it after each (re)render.
-			api.renderFinished.on(() => this.stripBranding(container));
-			api.tex(source);
+			const svg = tk.renderToSVG(1);
+			const doc = new DOMParser().parseFromString(
+				svg,
+				"image/svg+xml"
+			);
+			const svgEl = doc.documentElement;
+			if (svgEl.nodeName.toLowerCase() !== "svg") {
+				this.renderError(container, "Verovio returned no SVG.");
+				return;
+			}
+			container.appendChild(svgEl);
 		} catch (e) {
 			this.renderError(container, String(e));
 		}
-	}
-
-	private stripBranding(container: HTMLElement) {
-		container.querySelectorAll("text, tspan, a").forEach((el) => {
-			if (/rendered by alphatab/i.test(el.textContent || "")) {
-				(el.closest("a") || el).remove();
-			}
-		});
-	}
-
-	/**
-	 * Set alphaTab's glyph/line colors to the current theme text color so the
-	 * score is legible in light and dark themes alike. Reads the computed color
-	 * the container inherits (Obsidian's --text-normal).
-	 */
-	private applyThemeColors(settings: alphaTab.Settings, container: HTMLElement) {
-		const rgb = getComputedStyle(container).color.match(/\d+(\.\d+)?/g);
-		if (!rgb || rgb.length < 3) return;
-		const color = new alphaTab.model.Color(
-			Number(rgb[0]),
-			Number(rgb[1]),
-			Number(rgb[2]),
-			255
-		);
-		const r = settings.display.resources;
-		r.mainGlyphColor = color;
-		r.secondaryGlyphColor = color;
-		r.scoreInfoColor = color;
-		r.staffLineColor = color;
-		r.barSeparatorColor = color;
-		r.barNumberColor = color;
 	}
 
 	private renderError(container: HTMLElement, message: string) {
 		container.empty();
 		container.createEl("pre", {
 			cls: "music-notation-error",
-			text: `alphaTab error:\n${message}`,
+			text: `Music notation error:\n${message}`,
 		});
 	}
 
@@ -198,32 +140,17 @@ class MusicNotationSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Default staves")
+			.setName("Render scale")
 			.setDesc(
-				"Which staves to show. A block that sets \\staff{...} in its alphaTex overrides this."
+				"Size of the engraved music, as a percentage. Lower is smaller."
 			)
-			.addDropdown((d) =>
-				d
-					.addOption("scoretab", "Notation + tab")
-					.addOption("tab", "Tab only")
-					.addOption("score", "Notation only")
-					.setValue(this.plugin.settings.staveProfile)
+			.addSlider((s) =>
+				s
+					.setLimits(20, 100, 5)
+					.setValue(this.plugin.settings.scale)
+					.setDynamicTooltip()
 					.onChange(async (v) => {
-						this.plugin.settings.staveProfile = v as StaveChoice;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Show chord diagrams")
-			.setDesc(
-				"Show the chord-box diagram grid at the top of the score. Chord names above the music always show."
-			)
-			.addToggle((t) =>
-				t
-					.setValue(this.plugin.settings.showChordDiagrams)
-					.onChange(async (v) => {
-						this.plugin.settings.showChordDiagrams = v;
+						this.plugin.settings.scale = v;
 						await this.plugin.saveSettings();
 					})
 			);

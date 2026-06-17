@@ -1,47 +1,48 @@
 # Music Notation (Obsidian plugin)
 
-Write and render **staff notation, guitar tab, chords and lyrics in one sheet** —
-multi-track, from a plain-text code block — inside Obsidian.
+Render **staff notation, guitar tab, chords and lyrics in one sheet** — multi-stave,
+from a plain-text code block — inside Obsidian.
 
-Powered by [alphaTab](https://github.com/CoderLine/alphaTab). Fills the gap that no
-existing Obsidian plugin renders [alphaTex](https://alphatab.net/docs/alphatex/introduction)
-text from a code block (existing alphaTab plugins are file-based `.gp` viewers).
+Powered by [Verovio](https://www.verovio.org). The WASM engine (with its SMuFL music
+font) is bundled into the plugin, so rendering is self-contained, offline, and leaves
+no watermark.
 
 ## Usage
 
-Put alphaTex inside a fenced `alphatab` block:
+Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is
+auto-detected (ABC tunes start with an `X:` header; everything else is treated as
+MusicXML).
+
+ABC:
 
 ````markdown
-```alphatab
-\title "Song"
-\tempo 80
-.
-:8 (5.5 7.3 7.2) 7.4 (7.3 7.2) 7.4 | (2.5 4.3 3.2) 4.4 (4.3 3.2) 4.4 |
+```music-verovio
+X:1
+M:4/4
+K:D
+"D" D E F A | "G" G A B c |
+w: Ka-tie don't cry
 ```
 ````
 
-Multi-track (one staff per part):
+MusicXML (excerpt — exact frets, multi-stave, lyrics all expressible):
 
 ````markdown
-```alphatab
-\track "Guitar"
-:4 0.3 2.3 3.3 0.2 |
-\track "Bass"
-\clef F4
-:4 0.4 0.4 2.4 2.4 |
+```music-verovio
+<score-partwise version="4.0">
+  ...
+</score-partwise>
 ```
 ````
 
 ## Status
 
-Early scaffold. Core flow: code-block processor → `alphaTab.AlphaTabApi.tex()` → SVG render.
+**Phase 1: the render engine.** Verovio runs inside Obsidian; the code block accepts
+raw MusicXML or ABC. The score is themed to the active light/dark colors.
 
-Open items:
-- Bundle Bravura SMuFL font into the plugin folder and verify `core.fontDirectory`
-  resolves in Obsidian's Electron sandbox.
-- Main-thread layout (`useWorkers = false`) — confirm performance on long scores.
-- Optional playback (soundfont) — off by default.
-- Mobile support — unverified.
+Planned next: a friendly text format that compiles to MusicXML (so you don't hand-write
+XML), guitar chord diagrams, and hiding the notation staff on tab charts. See
+`notes/.../music-notation-system/` for the design.
 
 ## Development
 
@@ -51,8 +52,8 @@ npm run dev      # watch build -> main.js
 npm run build    # type-check + production bundle
 ```
 
-Symlink or copy `main.js`, `manifest.json`, `styles.css` (and the `font/` dir) into
-`<vault>/.obsidian/plugins/music-notation/`.
+Symlink or copy `main.js`, `manifest.json`, `styles.css` into
+`<vault>/.obsidian/plugins/music-notation/`. (No font dir needed — Verovio embeds it.)
 
 ## License
 

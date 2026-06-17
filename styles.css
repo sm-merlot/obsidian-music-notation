@@ -5,6 +5,19 @@
 
 .music-notation svg {
 	max-width: 100%;
+	height: auto;
+	display: block;
+	margin: 0 auto;
+}
+
+/*
+ * Verovio emits SVG with no explicit fill/stroke — every glyph, stem and staff
+ * line inherits. Paint them with the theme's text color so the score is legible
+ * in light and dark themes alike.
+ */
+.music-notation svg {
+	fill: var(--text-normal);
+	stroke: var(--text-normal);
 }
 
 .music-notation-error {
