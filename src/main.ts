@@ -11,10 +11,16 @@ import { VerovioToolkit } from "verovio/esm";
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
 	scale: number;
+	/**
+	 * Horizontal note-spacing factor (percent of Verovio defaults). Higher =
+	 * more breathing room between notes/lyrics, fewer measures per line.
+	 */
+	spacing: number;
 }
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
 	scale: 40,
+	spacing: 140,
 };
 
 type InputFormat = "musicxml" | "abc";
@@ -71,11 +77,16 @@ export default class MusicNotationPlugin extends Plugin {
 			// so the score fills the note column. Fall back to a sensible width
 			// before layout (clientWidth can be 0 on first paint).
 			const px = container.clientWidth || el.clientWidth || 800;
+			const f = this.settings.spacing / 100;
 			tk.setOptions({
 				inputFrom: detectFormat(source),
 				scale: this.settings.scale,
 				adjustPageHeight: true,
 				pageWidth: Math.round((px * 100) / this.settings.scale),
+				// Spread notes/lyrics horizontally. Verovio defaults: linear 0.25,
+				// non-linear 0.6 (both capped at 1). Scale by the user's factor.
+				spacingLinear: Math.min(1, 0.25 * f),
+				spacingNonLinear: Math.min(1, 0.6 * f),
 				// Very tall page so Verovio wraps into systems but never paginates
 				// — we only render page 1, so everything must fit on it.
 				pageHeight: 60000,
@@ -151,6 +162,22 @@ class MusicNotationSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange(async (v) => {
 						this.plugin.settings.scale = v;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Note spacing")
+			.setDesc(
+				"Horizontal breathing room between notes and lyrics, as a percentage. Higher spreads the music out."
+			)
+			.addSlider((s) =>
+				s
+					.setLimits(100, 250, 10)
+					.setValue(this.plugin.settings.spacing)
+					.setDynamicTooltip()
+					.onChange(async (v) => {
+						this.plugin.settings.spacing = v;
 						await this.plugin.saveSettings();
 					})
 			);

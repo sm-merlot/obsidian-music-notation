@@ -11,13 +11,15 @@
 }
 
 /*
- * Verovio emits SVG with no explicit fill/stroke — every glyph, stem and staff
- * line inherits. Paint them with the theme's text color so the score is legible
- * in light and dark themes alike.
+ * Theme the score for light/dark. Verovio glyphs/noteheads/beams take `fill`,
+ * while staff lines, stems and barlines have no stroke attribute — an embedded
+ * <style> in the SVG strokes them with `currentColor`. So we must set BOTH
+ * `color` (drives currentColor) and `fill` to the theme text color, else the
+ * staff lines stay black and vanish in dark mode.
  */
 .music-notation svg {
+	color: var(--text-normal);
 	fill: var(--text-normal);
-	stroke: var(--text-normal);
 }
 
 .music-notation-error {
