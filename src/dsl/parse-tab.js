@@ -105,11 +105,12 @@ function eventsForBar(strings, unitFrac, colsPerBar) {
 	return events;
 }
 
-// A grid row: a single-letter label then `:` or `|` then content.
-// Letter `L`/`l` = an aligned lyric row (syllables align to the grid columns);
-// any other letter = a string row (e/B/G/D/A/E, case distinguishes high/low E).
-const ROW_LINE = /^\s*([A-Za-z])\s*[|:]\s?(.*)$/;
-const isLyricLabel = (c) => c === "L" || c === "l";
+// A grid row: a label then `:` or `|` then content. Single-letter labels are
+// strings (e/B/G/D/A/E, case distinguishes high/low E); `L` = aligned lyric row;
+// `ch` = aligned chord row. Both lyric & chord tokens align to the grid columns.
+const ROW_LINE = /^\s*([A-Za-z]+)\s*[|:]\s?(.*)$/;
+const isLyricLabel = (s) => s === "L" || s === "l";
+const isChordLabel = (s) => /^(ch|chord|chords)$/i.test(s);
 
 // Extract syllables from one bar of an aligned lyric row: each whitespace-
 // delimited token is a syllable at its start column. Leading/trailing '-' marks
@@ -168,10 +169,14 @@ export function parseTab(src) {
 				i++;
 			}
 			const lyricRow = rows.find((r) => isLyricLabel(r.label));
-			const stringLines = rows.filter((r) => !isLyricLabel(r.label));
+			const chordRow = rows.find((r) => isChordLabel(r.label));
+			const stringLines = rows.filter(
+				(r) => r.label.length === 1 && !isLyricLabel(r.label)
+			);
 			systems.push({
 				section: curSection,
 				lyricLine: lyricRow ? lyricRow.content : null,
+				chordLine: chordRow ? chordRow.content : null,
 				stringLines,
 			});
 			curSection = null;
@@ -223,21 +228,28 @@ export function parseTab(src) {
 			cumOffset += colsPerBar + 1; // +1 for the '|' barline char
 			bars.push({ events, colsPerBar });
 		}
-		// Map the aligned lyric row to events by absolute character column across
-		// the whole system (so the lyric line needs no '|' — type it above, like
-		// the gdocs). Each whitespace-token = one syllable at its start column.
+		// Map aligned lyric/chord rows to events by absolute character column
+		// across the whole system (rows need no '|' — type them above, aligned).
+		const nearest = (col) => {
+			let best = allEvents[0];
+			let bestD = Infinity;
+			for (const e of allEvents) {
+				const d = Math.abs(e.absCol - col);
+				if (d < bestD) {
+					bestD = d;
+					best = e;
+				}
+			}
+			return best;
+		};
 		if (sys.lyricLine && allEvents.length) {
 			for (const syl of syllablesFor(sys.lyricLine)) {
-				let best = allEvents[0];
-				let bestD = Infinity;
-				for (const e of allEvents) {
-					const d = Math.abs(e.absCol - syl.col);
-					if (d < bestD) {
-						bestD = d;
-						best = e;
-					}
-				}
-				(best.syllables ||= []).push(syl.raw);
+				(nearest(syl.col).syllables ||= []).push(syl.raw);
+			}
+		}
+		if (sys.chordLine && allEvents.length) {
+			for (const tok of syllablesFor(sys.chordLine)) {
+				nearest(tok.col).chord = tok.raw;
 			}
 		}
 		out.systems.push({ section: sys.section, bars });

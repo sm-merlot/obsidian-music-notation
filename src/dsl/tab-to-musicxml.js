@@ -33,6 +33,31 @@ function dotsXml(n) {
 	return "<dot/>".repeat(n);
 }
 
+// Chord name -> <harmony>. The literal suffix is shown via kind@text so jazz
+// chords (Cmaj7#11, Cm7b5, G/B) display exactly as written.
+function harmonyXml(name) {
+	const m = name.match(/^([A-G][#b]?)([^/]*)(?:\/([A-G][#b]?))?$/);
+	if (!m) return "";
+	const alt = (a) => (a === "#" ? 1 : a === "b" ? -1 : 0);
+	const rootAlter = alt(m[1][1]);
+	const rootA = rootAlter ? `<root-alter>${rootAlter}</root-alter>` : "";
+	const rest = m[2] || "";
+	let kind = "major";
+	if (/^(maj7|M7|Maj7)/.test(rest)) kind = "major-seventh";
+	else if (/^(m7|min7|-7)/.test(rest)) kind = "minor-seventh";
+	else if (/^7/.test(rest)) kind = "dominant";
+	else if (/^dim|^o/.test(rest)) kind = "diminished";
+	else if (/^aug|^\+/.test(rest)) kind = "augmented";
+	else if (/^(m|min|-)/.test(rest)) kind = "minor";
+	const bass = m[3]
+		? `<bass><bass-step>${m[3][0]}</bass-step>${alt(m[3][1]) ? `<bass-alter>${alt(m[3][1])}</bass-alter>` : ""}</bass>`
+		: "";
+	return (
+		`<harmony print-frame="no"><root><root-step>${m[1][0]}</root-step>${rootA}</root>` +
+		`<kind text="${esc(rest)}">${kind}</kind>${bass}</harmony>`
+	);
+}
+
 // Beam roles for a bar's events: group beamable notes (eighth or shorter) that
 // fall within the same beat. Verovio honors encoded <beam>s and won't auto-beam.
 function beamRoles(events, beatFrac) {
@@ -126,6 +151,7 @@ export function tabToMusicXML(model) {
 		for (const e of bar.events) {
 			const { type, dots, div } = durParts(e.durFrac);
 			backup += div;
+			if (e.chord) v1 += harmonyXml(e.chord);
 			let lyric = "";
 			if (e.syllables && e.syllables.length) {
 				const s = syllab(e.syllables.join(" "));

@@ -26,11 +26,11 @@ export function stripNotationStaff(svg) {
 		);
 		if (staves.length < 2) return; // single-staff: nothing to strip
 
-		// Strip staff 1 (notation), keeping only its lyric text.
+		// Strip staff 1 (notation), keeping only its lyric + chord-symbol text.
 		const g1 = staves[0];
-		const verses = Array.from(g1.querySelectorAll("g.verse"));
+		const keep = Array.from(g1.querySelectorAll("g.verse, g.harm"));
 		while (g1.firstChild) g1.removeChild(g1.firstChild);
-		verses.forEach((v) => g1.appendChild(v));
+		keep.forEach((v) => g1.appendChild(v));
 
 		// Trim barlines (which spanned both staves) down to the tab staff's top
 		// line so they don't dangle up into the removed notation staff.
@@ -88,9 +88,12 @@ export function stripNotationStaff(svg) {
 }
 
 // Raw-coordinate paddings (Verovio internal units).
-const TOP_PAD = 200;
-const SYS_GAP = 500;
-const BOT_PAD = 200;
+const TOP_PAD = 140;
+const SYS_GAP = 320;
+const BOT_PAD = 160;
+// Approx glyph extent above/below a text baseline, so lyrics/chords aren't clipped.
+const TEXT_ASCENT = 400;
+const TEXT_DESCENT = 140;
 
 function compactSystems(svg) {
 	const inner = svg.querySelector("svg"); // the definition-scale (raw-coord) svg
@@ -134,7 +137,10 @@ function contentBox(sys) {
 	});
 	sys.querySelectorAll("text").forEach((t) => {
 		const y = parseFloat(t.getAttribute("y"));
-		if (!Number.isNaN(y)) acc(y);
+		if (!Number.isNaN(y)) {
+			acc(y - TEXT_ASCENT);
+			acc(y + TEXT_DESCENT);
+		}
 	});
 	return top === Infinity ? null : { top, bot };
 }
