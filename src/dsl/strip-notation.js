@@ -16,8 +16,9 @@ function hasClass(el, c) {
 export function stripNotationStaff(svg) {
 	const rm = (el) => el && el.parentNode && el.parentNode.removeChild(el);
 
-	// System brace + part label look wrong once a staff is gone.
-	svg.querySelectorAll("g.grpSym, g.label").forEach(rm);
+	// System brace, part label and floating measure numbers look wrong once the
+	// notation staff is gone.
+	svg.querySelectorAll("g.grpSym, g.label, g.mNum").forEach(rm);
 
 	svg.querySelectorAll("g.measure").forEach((measure) => {
 		const staves = Array.from(measure.children).filter((c) =>
@@ -52,26 +53,30 @@ export function stripNotationStaff(svg) {
 		}
 	});
 
-	// Draw a left barline at the start of every system (Verovio doesn't, and the
-	// ASCII tabs always lead with '|'). Vertical line at the system's first tab
-	// staff left edge, spanning its lines.
-	const NS = "http://www.w3.org/2000/svg";
+	// Each system has an initial barline (a direct child path of the system,
+	// spanning both staves) — this is the left edge line. Clamp it to the tab
+	// staff so it isn't a tall line dangling into the removed notation staff.
 	svg.querySelectorAll("g.system").forEach((system) => {
 		const measure = system.querySelector("g.measure");
 		if (!measure) return;
 		const staves = Array.from(measure.children).filter((c) =>
 			hasClass(c, "staff")
 		);
-		const tab = staves[staves.length - 1];
-		const box = tab && staffBox(tab);
-		if (!box) return;
-		const path = svg.ownerDocument.createElementNS(NS, "path");
-		path.setAttribute("d", `M${box.left} ${box.top} L${box.left} ${box.bottom}`);
-		path.setAttribute("stroke-width", "18");
-		const g = svg.ownerDocument.createElementNS(NS, "g");
-		g.setAttribute("class", "barLine");
-		g.appendChild(path);
-		measure.insertBefore(g, measure.firstChild);
+		if (staves.length < 2) return;
+		const tabTop = staffTopY(staves[1]);
+		if (tabTop == null) return;
+		Array.from(system.children).forEach((ch) => {
+			if (ch.tagName !== "path") return;
+			const m = (ch.getAttribute("d") || "").match(VLINE);
+			if (!m) return;
+			const lo = Math.min(Number(m[2]), Number(m[4]));
+			const hi = Math.max(Number(m[2]), Number(m[4]));
+			if (hi <= tabTop + 1) {
+				rm(ch);
+				return;
+			}
+			ch.setAttribute("d", `M${m[1]} ${Math.max(lo, tabTop)} L${m[3]} ${hi}`);
+		});
 	});
 
 	return svg;

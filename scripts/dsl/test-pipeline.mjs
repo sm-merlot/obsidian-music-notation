@@ -38,24 +38,32 @@ if (labels.join(",") !== "Verse,Chorus") {
 	fail++;
 }
 
+const VLINE = /^M\s*(-?[\d.]+)\s+(-?[\d.]+)\s+L\s*(-?[\d.]+)\s+(-?[\d.]+)/;
 sections.forEach((sec) => {
 	tk.setOptions({ inputFrom: "musicxml", scale: 40, adjustPageHeight: true, pageWidth: 2000, pageHeight: 60000, header: "none", footer: "none", breaks: "auto", pageMarginLeft: 50, pageMarginRight: 50, spacingStaff: 2 });
 	const ok = tk.loadData(sec.xml);
 	const svg = new DOMParser().parseFromString(ok ? tk.renderToSVG(1) : "", "image/svg+xml").documentElement;
 	const verses = svg.querySelectorAll("g.verse").length;
-	const barsBefore = svg.querySelectorAll("g.barLine").length;
 	stripNotationStaff(svg);
 	const out = svg.outerHTML;
-	const barsAfter = svg.querySelectorAll("g.barLine").length;
 	let leftover = 0;
+	let tabTop = Infinity;
+	const m0 = svg.querySelectorAll("g.measure")[0];
+	(m0 ? Array.from(m0.children).filter((c) => (c.getAttribute("class") || "").split(/\s+/).includes("staff"))[1] : null)
+		?.querySelectorAll("path").forEach((p) => { const x = (p.getAttribute("d") || "").match(VLINE); if (x && Math.abs(+x[2] - +x[4]) < 1) tabTop = Math.min(tabTop, +x[2]); });
+	let overhang = 0;
+	const checkV = (p) => { const x = (p.getAttribute("d") || "").match(VLINE); if (!x) return; const lo = Math.min(+x[2], +x[4]); if (lo < tabTop - 1) overhang = Math.max(overhang, tabTop - lo); };
+	svg.querySelectorAll("g.barLine path").forEach(checkV);
+	svg.querySelectorAll("g.system").forEach((s) => Array.from(s.children).forEach((c) => { if (c.tagName === "path") checkV(c); }));
 	svg.querySelectorAll("g.measure").forEach((m) => {
 		const st = Array.from(m.children).filter((c) => (c.getAttribute("class") || "").split(/\s+/).includes("staff"));
 		if (st.length >= 2) leftover += st[0].querySelectorAll("g.notehead, path").length;
 	});
+	const mnum = svg.querySelectorAll("g.mNum").length;
 	const tab = /tabGrp|tabDurSym/.test(out);
-	const good = ok && verses > 0 && tab && leftover === 0 && barsAfter > barsBefore;
+	const good = ok && verses > 0 && tab && leftover === 0 && overhang < 2 && mnum === 0;
 	if (!good) fail++;
-	console.log(`  [${sec.label}] load=${ok} verses=${verses} tab=${tab} leftover=${leftover} barlines ${barsBefore}->${barsAfter} (left added) ${good ? "OK" : "FAIL"}`);
+	console.log(`  [${sec.label}] load=${ok} verses=${verses} tab=${tab} leftover=${leftover} barlineOverhang=${overhang} mNum=${mnum} ${good ? "OK" : "FAIL"}`);
 });
 
 console.log(fail ? "\nPIPELINE FAIL" : "\nPIPELINE OK");

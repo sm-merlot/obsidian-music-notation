@@ -57,6 +57,29 @@ export function tabToMusicXML(model) {
 		for (const bar of sys.bars) measures.push(bar);
 	}
 
+	// Link connectors: a note's `conn` ties/slurs it back to the previous note
+	// on the same string. '^' = tie; h/p/s/slashes = slur (legato line in tab).
+	const lastByString = new Map();
+	let slurN = 0;
+	for (const bar of measures) {
+		for (const e of bar.events) {
+			for (const n of e.notes) {
+				const prev = lastByString.get(n.stringNum);
+				if (n.conn && prev) {
+					if (n.conn === "^") {
+						prev.tieStart = true;
+						n.tieStop = true;
+					} else {
+						const num = ++slurN;
+						(prev.slurStart ||= []).push(num);
+						(n.slurStop ||= []).push(num);
+					}
+				}
+				lastByString.set(n.stringNum, n);
+			}
+		}
+	}
+
 	const attributes =
 		`<attributes><divisions>${DIV}</divisions><key><fifths>0</fifths></key>` +
 		`<time><beats>${d.beats}</beats><beat-type>${d.beatType}</beat-type></time>` +
@@ -86,12 +109,24 @@ export function tabToMusicXML(model) {
 			const { type, dots, div } = durParts(e.durFrac);
 			e.notes.forEach((n, i) => {
 				const alter = n.alter ? `<alter>${n.alter}</alter>` : "";
+				// <tie> (sound) goes after duration; <tied>/<slur> (visual) in
+				// <notations>.
+				const tieEl =
+					(n.tieStart ? '<tie type="start"/>' : "") +
+					(n.tieStop ? '<tie type="stop"/>' : "");
+				const tied =
+					(n.tieStart ? '<tied type="start"/>' : "") +
+					(n.tieStop ? '<tied type="stop"/>' : "");
+				const slurs = [
+					...(n.slurStart || []).map((x) => `<slur type="start" number="${x}"/>`),
+					...(n.slurStop || []).map((x) => `<slur type="stop" number="${x}"/>`),
+				].join("");
 				v2 +=
 					`<note>${i > 0 ? "<chord/>" : ""}` +
 					`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
-					`<duration>${div}</duration><voice>2</voice><type>${type}</type>${dotsXml(dots)}` +
+					`<duration>${div}</duration>${tieEl}<voice>2</voice><type>${type}</type>${dotsXml(dots)}` +
 					`<staff>2</staff>` +
-					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical></notations></note>`;
+					`<notations><technical><string>${n.stringNum}</string><fret>${n.fret}</fret></technical>${tied}${slurs}</notations></note>`;
 			});
 		}
 		const backupXml = `<backup><duration>${backup}</duration></backup>`;

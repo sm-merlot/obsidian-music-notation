@@ -39,11 +39,16 @@ export function parseDirectives(lines) {
 	return d;
 }
 
-// Tokenize one string's bar content into [{col, fret}] onsets. `-` = no onset.
-// A multi-digit fret starts at its first digit's column; following digit columns
-// are consumed (not separate onsets).
+// A connector char between two frets on a string: h hammer, p pull, s/\// slide,
+// ^ tie. Captured so it links the new onset back to the previous one.
+const CONNECTORS = "hps/\\^";
+
+// Tokenize one string's bar content into [{col, fret, conn}] onsets. `-` = no
+// onset. A multi-digit fret starts at its first digit's column. `conn` is the
+// connector char seen since the previous onset (links this note to the prior).
 function onsetsFor(barText) {
 	const onsets = [];
+	let pendingConn = null;
 	for (let i = 0; i < barText.length; i++) {
 		const c = barText[i];
 		if (c >= "0" && c <= "9") {
@@ -53,10 +58,12 @@ function onsetsFor(barText) {
 				num += barText[j];
 				j++;
 			}
-			onsets.push({ col: i, fret: Number(num) });
+			onsets.push({ col: i, fret: Number(num), conn: pendingConn });
+			pendingConn = null;
 			i = j - 1;
+		} else if (CONNECTORS.includes(c) && onsets.length) {
+			pendingConn = c; // only meaningful between two frets
 		}
-		// '-', techniques (h/p/\/), spaces: not onsets (techniques handled later)
 	}
 	return onsets;
 }
@@ -74,6 +81,7 @@ function eventsForBar(strings, unitFrac, colsPerBar) {
 				open: strings[s].open,
 				fret: o.fret,
 				col: o.col,
+				conn: o.conn,
 			});
 		}
 	}
@@ -89,6 +97,7 @@ function eventsForBar(strings, unitFrac, colsPerBar) {
 			notes: byCol.get(col).map((n) => ({
 				stringNum: n.stringNum,
 				fret: n.fret,
+				conn: n.conn,
 				...midiToPitch(n.open + n.fret),
 			})),
 		});

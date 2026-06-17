@@ -30,6 +30,10 @@ A: 5-------------------------------|5-------------------7-------7---
 ```
 ````
 
+Between two frets on a string you can write a **connector**: `h` hammer-on, `p`
+pull-off, `s` / `/` / `\` slide (drawn as a legato line), and `^` tie (e.g. `7h9`,
+`5/7`, `7^7`). A tie also lets you hold a note across a slot to line lyrics up.
+
 `mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano). The
 `chords` mode (chord-over-lyric) is coming.
 
