@@ -1,7 +1,7 @@
 {
 	"id": "music-notation",
 	"name": "Music Notation",
-	"version": "0.2.8",
+	"version": "0.2.9",
 	"minAppVersion": "1.4.0",
 	"description": "Render staff notation, guitar tab, chords and lyrics from MusicXML or ABC code blocks, powered by Verovio.",
 	"author": "sm-merlot",

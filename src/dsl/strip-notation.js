@@ -33,14 +33,21 @@ export function stripNotationStaff(svg) {
 
 		// Trim barlines (which spanned both staves) down to the tab staff's top
 		// line so they don't dangle up into the removed notation staff.
+		// A Verovio measure barline is drawn in segments (notation staff, the
+		// connector between staves, tab staff). Drop the segments that live
+		// entirely above the tab; clamp any that cross into it.
 		const tabTop = staffTopY(staves[1]);
 		if (tabTop != null) {
 			measure.querySelectorAll("g.barLine path").forEach((p) => {
 				const m = (p.getAttribute("d") || "").match(VLINE);
 				if (!m) return;
-				const bottom = Math.max(Number(m[2]), Number(m[4]));
-				const top = Math.max(Math.min(Number(m[2]), Number(m[4])), tabTop);
-				p.setAttribute("d", `M${m[1]} ${top} L${m[3]} ${bottom}`);
+				const lo = Math.min(Number(m[2]), Number(m[4]));
+				const hi = Math.max(Number(m[2]), Number(m[4]));
+				if (hi <= tabTop + 1) {
+					p.parentNode && p.parentNode.removeChild(p);
+					return;
+				}
+				p.setAttribute("d", `M${m[1]} ${Math.max(lo, tabTop)} L${m[3]} ${hi}`);
 			});
 		}
 	});
