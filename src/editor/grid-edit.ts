@@ -60,17 +60,19 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 			handled = false;
 			return;
 		}
-		const line = doc.lineAt(fromA);
-		const start = gridStart(line.text);
-		if (start < 0 || !lineInMusic(tr.startState, fromA)) {
+		if (!lineInMusic(tr.startState, fromA)) {
 			handled = false;
 			return;
 		}
-		const text = insText.replace(/\./g, " "); // double-space->". " revert
+		const line = doc.lineAt(fromA);
+		const start = gridStart(line.text);
+		// `.`→space revert applies to ANY line in the block (kills the macOS
+		// double-space->". " on H:/L:/blank lines too, not just grid rows)
+		const text = insText.replace(/\./g, " ");
 		let to = fromA;
-		// overtype: replace the char(s) under the cursor, but only within the grid
-		// content and never past the end of the line (so appending still works)
-		if (fromA - line.from >= start && fromA < line.to) {
+		// overtype: replace the char under the cursor, but ONLY in grid content and
+		// never past the end of the line (so appending still works)
+		if (start >= 0 && fromA - line.from >= start && fromA < line.to) {
 			to = Math.min(line.to, fromA + text.length);
 		}
 		if (text === insText && to === fromA) {
