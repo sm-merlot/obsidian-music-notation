@@ -69,17 +69,21 @@ interface Dir {
 	unitNum: number;
 	unitDenom: number;
 	tuning: string[];
+	clefs: string[];
 }
 
 function directives(lines: string[], b: Block): Dir {
-	const d: Dir = { mode: null, beats: 4, beatType: 4, unitNum: 1, unitDenom: 16, tuning: ["E", "A", "D", "G", "B", "e"] };
+	const d: Dir = { mode: null, beats: 4, beatType: 4, unitNum: 1, unitDenom: 16, tuning: ["E", "A", "D", "G", "B", "e"], clefs: ["treble"] };
 	for (let i = b.start; i <= b.end; i++) {
-		const m = lines[i].match(/^\s*(mode|meter|unit|tuning)\s*:\s*(.+?)\s*$/i);
+		const m = lines[i].match(/^\s*(mode|meter|unit|tuning|clef)\s*:\s*(.+?)\s*$/i);
 		if (!m) continue;
 		const v = m[2].trim();
 		switch (m[1].toLowerCase()) {
 			case "mode":
 				d.mode = v;
+				break;
+			case "clef":
+				d.clefs = v.split(/[\s,]+/).filter(Boolean);
 				break;
 			case "meter": {
 				const [a, c] = v.split("/").map(Number);
@@ -250,10 +254,47 @@ function lastBarWidth(text: string): number {
 	return 0;
 }
 
-/** One-command entry: blank line -> new stave; on a grid row -> add a bar. */
+/** Scaffold the first staff(s) in an empty block (just directives, no grid drawn
+ *  yet): a tab stave from `tuning`, or notation staves per the `clef:` list (grand
+ *  = treble + gap + bass), each with one empty bar. */
+function createStaves(lines: string[], b: Block, pos: Pos): Edit {
+	const d = directives(lines, b);
+	const w = unitsPerBar(d);
+	const staff5 = () => {
+		const line = "|" + "-".repeat(w) + "|";
+		const sp = "|" + " ".repeat(w) + "|";
+		return [line, sp, line, sp, line, sp, line, sp, line]; // 5 lines + 4 spaces, top→bottom
+	};
+	let rows: string[];
+	if (d.mode === "tab") {
+		const labels = [...d.tuning].reverse(); // tuning is low→high; tab rows are high→low
+		rows = labels.map((l) => `${l}:  ` + "-".repeat(w));
+	} else {
+		rows = [];
+		d.clefs.forEach((c, i) => {
+			if (i) rows.push("", ""); // double-blank separates staves
+			rows.push(...(c.toLowerCase() === "grand" ? [...staff5(), "", "", ...staff5()] : staff5()));
+		});
+	}
+	const inner = lines.slice(b.start, b.end + 1);
+	const at = Math.max(0, Math.min(inner.length, pos.line - b.start));
+	if (at > 0 && (inner[at - 1] || "").trim() !== "") rows = ["", ...rows]; // blank after the header
+	inner.splice(at, 0, ...rows);
+	let fg = rows.findIndex((t) => gridStart(t) >= 0);
+	if (fg < 0) fg = 0;
+	const s = gridStart(rows[fg]);
+	const ch = s >= 0 ? s + (rows[fg][s] === "|" ? 1 : 0) : 0;
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: b.start + at + fg, ch } };
+}
+
+/** One-command entry: empty block -> scaffold staff; blank line -> new stave;
+ *  on a grid row -> add a bar. */
 export function addBarOrSystem(lines: string[], pos: Pos): Edit | null {
 	const b = blockAt(lines, pos.line);
 	if (!b) return null;
+	let hasStaff = false;
+	for (let i = b.start; i <= b.end; i++) if (gridStart(lines[i]) >= 0) { hasStaff = true; break; }
+	if (!hasStaff) return createStaves(lines, b, pos);
 	if ((lines[pos.line] || "").trim() === "") return addSystem(lines, pos);
 	return addBar(lines, pos);
 }
