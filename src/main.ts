@@ -268,7 +268,8 @@ export default class MusicNotationPlugin extends Plugin {
 			const dy = 24;
 			const fretY = (f: number) => nutY + f * dy; // 4 fret rows
 			const svg = document.createElementNS(NS, "svg");
-			svg.setAttribute("viewBox", "0 0 120 132");
+			// widen when a base-fret label ("5fr") needs room on the right
+			svg.setAttribute("viewBox", `0 0 ${base > 1 ? 150 : 120} 132`);
 			svg.setAttribute("class", "cb-svg");
 			const el = (tag: string, attrs: Record<string, string | number>) => {
 				const e = document.createElementNS(NS, tag);
@@ -283,7 +284,7 @@ export default class MusicNotationPlugin extends Plugin {
 			for (let f = 0; f <= 4; f++)
 				el("line", { x1: xs(0), y1: fretY(f), x2: xs(5), y2: fretY(f), stroke: "currentColor", "stroke-width": f === 0 && base === 1 ? 6 : 2 });
 			if (base > 1)
-				el("text", { x: xs(5) + 9, y: fretY(1) - 6, "font-size": 16, fill: "currentColor" }).textContent = `${base}fr`;
+				el("text", { x: xs(5) + 8, y: fretY(1) - 5, "font-size": 14, fill: "currentColor" }).textContent = `${base}fr`;
 			// fingered dots
 			for (const dot of dots)
 				el("circle", { cx: xs(dot.string), cy: nutY + (dot.fret - 0.5) * dy, r: 7, fill: "currentColor" });
