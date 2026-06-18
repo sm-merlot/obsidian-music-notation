@@ -13,6 +13,7 @@ import { parseChords, chordParts } from "./dsl/chords.js";
 import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
+import { musicGridExtension } from "./editor/grid-edit";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -129,6 +130,8 @@ export default class MusicNotationPlugin extends Plugin {
 			"music-verovio",
 			(source, el, ctx) => this.renderBlock(source, el, ctx, false)
 		);
+		// Editing helpers for `music` blocks (overtype grids, plain Enter, etc.).
+		this.registerEditorExtension(musicGridExtension());
 	}
 
 	/**
