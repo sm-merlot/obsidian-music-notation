@@ -252,7 +252,12 @@ export default class MusicNotationPlugin extends Plugin {
 	 * glued above its word (so it stays aligned on any width). No engraving.
 	 */
 	private renderChords(source: string, target: HTMLElement) {
-		const { directives, blocks } = parseChords(source);
+		const parsed = parseChords(source) as {
+			directives: { capo?: string };
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			blocks: any[];
+		};
+		const { directives, blocks } = parsed;
 		if (directives.capo) {
 			target.createDiv({
 				cls: "music-notation-tuning",
