@@ -209,21 +209,15 @@ export function addSystem(lines: string[], pos: Pos): Edit | null {
 	if (!rows.length) return null;
 	// clone the current system's shape, emptied: keep labels + `|` + the staff
 	// lines, blank the notes. Works for tab and notation.
-	const insertAfter = Math.max(...rows);
+	const insertAfter = Math.max(...rows); // bottom of the source (incl. its ledger rows)
 	const clone = rows.map((r) => blankRow(lines[r]));
-	// Notation staves need empty rows above/below for ledger-line notes. Use
-	// spacer rows that carry the barline structure (spaces + `|`) so they're real
-	// pitch rows, not blank separators. Tab string rows don't need the headroom.
-	const tabLike = rows.some((r) => /^\s*[A-Ga-g][#b]?\s*:/.test(lines[r]));
-	const barred = rows.find((r) => lines[r].includes("|"));
-	const spacer = !tabLike && barred != null ? lines[barred].replace(/[^|]/g, " ") : null;
-	const head = spacer ? [spacer, spacer, spacer] : [];
-	// 2 blank rows = stave separator (both before and after, to isolate the new stave)
-	const block = ["", "", ...head, ...clone, ...head, "", ""];
+	// 2 empty lines separate staves (ledger notes reach at most 1 empty line out,
+	// so a 2-line gap keeps the staves distinct). Pad both sides.
+	const block = ["", "", ...clone, "", ""];
 	const inner = lines.slice(b.start, b.end + 1);
 	const at = insertAfter - b.start + 1;
 	inner.splice(at, 0, ...block);
-	const topDoc = b.start + at + 2 + head.length; // skip 2 blanks + headroom -> first staff row
+	const topDoc = b.start + at + 2; // skip the 2 blank lines -> first staff row
 	const s = gridStart(clone[0]);
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topDoc, ch: s >= 0 ? s : 0 } };
 }
