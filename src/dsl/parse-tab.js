@@ -43,36 +43,38 @@ export function parseDirectives(lines) {
 // ^ tie. Captured so it links the new onset back to the previous one.
 const CONNECTORS = "hps^";
 
-// Tokenize one string's bar content into [{col, fret, conn}] onsets. `-` = no
-// onset. Each column is a time slot, so EACH digit is its own note (e.g. `333`
-// = three separate frets, not fret 333). A fret of 10+ ends with `)`, which
-// groups only the LAST TWO digits — `12)3` = 12 then 3; `312)` = 3 then 12.
-// `conn` is the connector char since the previous onset (links to the prior).
+// Tokenize one string's bar content into onsets. Each onset has `col` (character
+// column, used for lyric/chord alignment) and `tcol` (time column = char column
+// minus spaces before it). A SPACE is pure padding — it widens the visual grid
+// but does NOT advance time. `-` = a rest (one time unit). Each digit is its own
+// note (`333` = three); a fret of 10+ ends with `)` grouping its last two digits.
+// `conn` is the connector char since the previous onset.
 function onsetsFor(barText) {
 	const onsets = [];
 	let pendingConn = null;
+	let spaces = 0; // spaces seen so far (subtracted from col to get tcol)
+	const push = (col, fret) => {
+		onsets.push({ col, tcol: col - spaces, fret, conn: pendingConn });
+		pendingConn = null;
+	};
 	for (let i = 0; i < barText.length; i++) {
 		const c = barText[i];
+		if (c === " ") {
+			spaces++;
+			continue;
+		}
 		if (c >= "0" && c <= "9") {
 			let k = i;
 			let run = "";
 			while (k < barText.length && barText[k] >= "0" && barText[k] <= "9") run += barText[k++];
 			if (barText[k] === ")") {
-				// ')' groups only the LAST TWO digits into one fret (frets are
-				// never 3 digits); any digits before are their own notes.
 				const lead = run.slice(0, -2);
 				const group = run.slice(-2);
-				for (let m = 0; m < lead.length; m++) {
-					onsets.push({ col: i + m, fret: Number(lead[m]), conn: pendingConn });
-					pendingConn = null;
-				}
-				onsets.push({ col: i + lead.length, fret: Number(group), conn: pendingConn });
-				pendingConn = null;
+				for (let m = 0; m < lead.length; m++) push(i + m, Number(lead[m]));
+				push(i + lead.length, Number(group));
 				i = k; // consume the ')'
 			} else {
-				// each digit is its own single-fret note
-				onsets.push({ col: i, fret: Number(c), conn: pendingConn });
-				pendingConn = null;
+				push(i, Number(c));
 			}
 		} else if (CONNECTORS.includes(c) && onsets.length) {
 			pendingConn = c; // only meaningful between two frets
@@ -81,19 +83,18 @@ function onsetsFor(barText) {
 	return onsets;
 }
 
-// Build events for one bar from per-string bar texts.
-// strings: [{label, open, barText}], colsPerBar: width used for the trailing gap.
-function eventsForBar(strings, unitFrac, colsPerBar) {
-	const byCol = new Map(); // col -> [{string,label,fret,open}]
+// Build events for one bar. `col` (char column) drives lyric/chord alignment;
+// durations come from `tcol` gaps (spaces don't advance time). barTimeLen = the
+// bar length in time units (non-space chars) for the trailing note's duration.
+function eventsForBar(strings, unitFrac, barTimeLen) {
+	const byCol = new Map(); // char col -> { tcol, notes:[] }
 	for (let s = 0; s < strings.length; s++) {
 		for (const o of onsetsFor(strings[s].barText)) {
-			if (!byCol.has(o.col)) byCol.set(o.col, []);
-			byCol.get(o.col).push({
+			if (!byCol.has(o.col)) byCol.set(o.col, { tcol: o.tcol, notes: [] });
+			byCol.get(o.col).notes.push({
 				stringNum: strings[s].num,
-				label: strings[s].label,
 				open: strings[s].open,
 				fret: o.fret,
-				col: o.col,
 				conn: o.conn,
 			});
 		}
@@ -101,13 +102,13 @@ function eventsForBar(strings, unitFrac, colsPerBar) {
 	const cols = [...byCol.keys()].sort((a, b) => a - b);
 	const events = [];
 	for (let k = 0; k < cols.length; k++) {
-		const col = cols[k];
-		const next = k + 1 < cols.length ? cols[k + 1] : colsPerBar;
-		const gap = Math.max(1, next - col);
+		const ent = byCol.get(cols[k]);
+		const nextT = k + 1 < cols.length ? byCol.get(cols[k + 1]).tcol : barTimeLen;
+		const gap = Math.max(1, nextT - ent.tcol);
 		events.push({
-			col,
+			col: cols[k],
 			durFrac: gap * unitFrac,
-			notes: byCol.get(col).map((n) => ({
+			notes: ent.notes.map((n) => ({
 				stringNum: n.stringNum,
 				fret: n.fret,
 				conn: n.conn,
@@ -240,7 +241,12 @@ export function parseTab(src) {
 				barText: (s.bars[b] || "").replace(/\s+$/, ""),
 			}));
 			const colsPerBar = Math.max(1, ...barStrings.map((s) => s.barText.length));
-			const events = eventsForBar(barStrings, dir.unitFrac, colsPerBar);
+			// time length = longest bar in NON-space chars (spaces don't count)
+			const barTimeLen = Math.max(
+				1,
+				...barStrings.map((s) => s.barText.replace(/ /g, "").length)
+			);
+			const events = eventsForBar(barStrings, dir.unitFrac, barTimeLen);
 			for (const e of events) {
 				e.absCol = cumOffset + e.col;
 				allEvents.push(e);

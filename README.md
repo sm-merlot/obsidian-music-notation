@@ -41,6 +41,9 @@ fine, e.g. `2-s-3`): `h` hammer-on, `p` pull-off, `s` slide, and `^` tie — e.g
 two frets; a tie also lets you hold a note across a slot to line lyrics up.
 Consecutive eighths (or shorter) are beamed by beat automatically.
 
+A literal **space** is padding — it widens the grid for the eye (room for a long
+lyric word or a 10+ fret) but does **not** advance the beat (only `-` and notes do).
+
 Each digit is its own note (a column is a time slot), so `333` = three notes. For a
 fret of 10 or more, end it with `)` — which groups the last two digits: `12)3` =
 fret twelve then three; `312)` = fret three then twelve.
