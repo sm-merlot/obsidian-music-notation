@@ -45,9 +45,9 @@ const CONNECTORS = "hps^";
 
 // Tokenize one string's bar content into [{col, fret, conn}] onsets. `-` = no
 // onset. Each column is a time slot, so EACH digit is its own note (e.g. `333`
-// = three separate frets, not fret 333). A fret of 10+ is written with a closing
-// `)` right after its digits — `12)3` = fret 12 then fret 3. `conn` is the
-// connector char since the previous onset (links this note to the prior).
+// = three separate frets, not fret 333). A fret of 10+ ends with `)`, which
+// groups only the LAST TWO digits — `12)3` = 12 then 3; `312)` = 3 then 12.
+// `conn` is the connector char since the previous onset (links to the prior).
 function onsetsFor(barText) {
 	const onsets = [];
 	let pendingConn = null;
@@ -58,14 +58,22 @@ function onsetsFor(barText) {
 			let run = "";
 			while (k < barText.length && barText[k] >= "0" && barText[k] <= "9") run += barText[k++];
 			if (barText[k] === ")") {
-				// digits grouped into one fret (10+); consume the ')' too
-				onsets.push({ col: i, fret: Number(run), conn: pendingConn });
-				i = k;
+				// ')' groups only the LAST TWO digits into one fret (frets are
+				// never 3 digits); any digits before are their own notes.
+				const lead = run.slice(0, -2);
+				const group = run.slice(-2);
+				for (let m = 0; m < lead.length; m++) {
+					onsets.push({ col: i + m, fret: Number(lead[m]), conn: pendingConn });
+					pendingConn = null;
+				}
+				onsets.push({ col: i + lead.length, fret: Number(group), conn: pendingConn });
+				pendingConn = null;
+				i = k; // consume the ')'
 			} else {
 				// each digit is its own single-fret note
 				onsets.push({ col: i, fret: Number(c), conn: pendingConn });
+				pendingConn = null;
 			}
-			pendingConn = null;
 		} else if (CONNECTORS.includes(c) && onsets.length) {
 			pendingConn = c; // only meaningful between two frets
 		}
