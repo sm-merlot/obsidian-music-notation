@@ -50,16 +50,10 @@ function tuningCaption(directives: {
 	if (eq(["e", "B", "G", "D", "A", "E"])) name = "Standard tuning";
 	else if (eq(["e", "B", "G", "D", "A", "D"])) name = "Drop D";
 	else name = labels.slice().reverse().join(" "); // low → high
-	// capo is free text. Shown whenever set: bare number -> "Capo N";
-	// none/no/0 -> "No capo"; anything else verbatim. Omitted only if absent.
+	// capo is free text, always prefixed "Capo " when set (e.g. "Capo 2",
+	// "Capo none", "Capo 2, orig none"). Omitted only if the directive is absent.
 	const raw = (directives.capo == null ? "" : String(directives.capo)).trim();
-	let capo = "";
-	if (raw) {
-		if (/^(none|no|0)$/i.test(raw)) capo = "No capo";
-		else if (/^\d+$/.test(raw)) capo = `Capo ${raw}`;
-		else capo = raw;
-	}
-	return name + (capo ? ` · ${capo}` : "");
+	return name + (raw ? ` · Capo ${raw}` : "");
 }
 
 /** DSL mode from an explicit `mode:` directive, else inferred from the body. */
