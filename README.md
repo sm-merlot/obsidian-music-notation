@@ -65,6 +65,28 @@ sustains it (duration); `|` = barline; `[Section]` separates staves. `L:` lyrics
 `H:` chords render on the staff. It engraves to real notation (jazz lead sheets,
 vocal/piano).
 
+````markdown
+```music
+mode: notation
+clef: treble
+key: C
+unit: 1/4
+
+----|----
+    |    
+----|----
+    |   x
+----|--x-
+    | x  
+----|x---
+   x|    
+--x-|----
+ x  |    
+x   |    
+```
+````
+(a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
+
 ### `music-verovio` — raw escape hatch
 
 Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is
