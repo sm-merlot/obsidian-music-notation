@@ -110,34 +110,44 @@ export function unitsPerBar(d: Dir): number {
 	return Math.max(1, Math.round((d.beats / d.beatType) * (d.unitDenom / d.unitNum)));
 }
 
-/** Grid-row line indices of the system containing `line` (H:/L: rows attach but
- *  aren't returned; blank/section/directive lines bound the system). */
-function systemGridRows(lines: string[], b: Block, line: number): number[] {
-	const inSystem = (t: string) => gridStart(t) >= 0 || /^\s*[HhLl]\s*:/.test(t);
+const isHL = (t: string) => /^\s*[HhLl]\s*:/.test(t);
+
+/** Full line span [top, bot] of the system containing `line` (staff + H:/L: rows
+ *  + interior single blanks), or null. Crosses a SINGLE blank (interior pitch
+ *  step) but stops at 2+ blanks (a stave separator), a section, or the fence. */
+function systemSpan(lines: string[], b: Block, line: number): [number, number] | null {
+	const inSystem = (t: string) => gridStart(t) >= 0 || isHL(t);
 	if (!inSystem(lines[line])) {
-		// not on a system row — fall back to the last grid row above in the block
 		let j = line;
 		while (j >= b.start && !(gridStart(lines[j]) >= 0)) j--;
-		if (j < b.start) return [];
+		if (j < b.start) return null;
 		line = j;
 	}
-	// Expand across a SINGLE blank line (an interior pitch step) but stop at a
-	// run of 2+ blanks (a stave separator), a section, or the fence.
+	// In notation a single blank line is an interior pitch step (cross it); in tab
+	// any blank line separates staves (stop at it).
+	const notation = directives(lines, b).mode === "notation";
 	const isBlank = (i: number) => (lines[i] || "").trim() === "";
 	let top = line;
 	let bot = line;
 	while (top - 1 >= b.start) {
 		if (inSystem(lines[top - 1])) { top--; continue; }
-		if (isBlank(top - 1) && top - 2 >= b.start && inSystem(lines[top - 2])) { top -= 2; continue; }
+		if (notation && isBlank(top - 1) && top - 2 >= b.start && inSystem(lines[top - 2])) { top -= 2; continue; }
 		break;
 	}
 	while (bot + 1 <= b.end) {
 		if (inSystem(lines[bot + 1])) { bot++; continue; }
-		if (isBlank(bot + 1) && bot + 2 <= b.end && inSystem(lines[bot + 2])) { bot += 2; continue; }
+		if (notation && isBlank(bot + 1) && bot + 2 <= b.end && inSystem(lines[bot + 2])) { bot += 2; continue; }
 		break;
 	}
+	return [top, bot];
+}
+
+/** Grid-row (staff/note) line indices of the system containing `line`. */
+function systemGridRows(lines: string[], b: Block, line: number): number[] {
+	const span = systemSpan(lines, b, line);
+	if (!span) return [];
 	const rows: number[] = [];
-	for (let i = top; i <= bot; i++) if (gridStart(lines[i]) >= 0) rows.push(i);
+	for (let i = span[0]; i <= span[1]; i++) if (gridStart(lines[i]) >= 0) rows.push(i);
 	return rows;
 }
 
@@ -169,14 +179,15 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	for (const r of rows) if (lines[r].includes("|")) w = Math.max(w, lastBarWidth(lines[r]));
 	if (!w) w = unitsPerBar(d);
 	const cursorLine = rows.includes(cur) ? cur : rows[0];
+	const systemHasBars = rows.some((r) => lines[r].includes("|"));
 	let cursorCh = R;
 	for (const r of rows) {
 		const i = r - b.start;
 		const f = fillChar(lines[r]);
 		const padded = lines[r] + f.repeat(Math.max(0, R - lines[r].length));
 		if (padded.endsWith("|")) inner[i] = padded + f.repeat(w) + "|"; // closing-bar style: ...| -> ...|----|
-		else if (padded.includes("|")) inner[i] = padded + "|" + f.repeat(w); // open style: ...- -> ...-|----
-		else inner[i] = padded + f.repeat(w + 1); // ledger/accidental row: just keep aligned, no stray |
+		else if (padded.includes("|") || !systemHasBars) inner[i] = padded + "|" + f.repeat(w); // open style: ...- -> ...-|----
+		else inner[i] = padded + f.repeat(w + 1); // ledger/accidental row in a barred system: keep aligned, no stray |
 		if (r === cursorLine) cursorCh = padded.endsWith("|") ? R : R + 1;
 	}
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cursorLine, ch: cursorCh } };
@@ -205,25 +216,33 @@ export function addSystem(lines: string[], pos: Pos): Edit | null {
 	const cur = pos.line;
 	const b = blockAt(lines, cur);
 	if (!b) return null;
-	const rows = systemGridRows(lines, b, cur);
-	if (!rows.length) return null;
-	// clone the current system's shape, emptied: keep labels + `|` + the staff
-	// lines, blank the notes. Works for tab and notation.
-	const insertAfter = Math.max(...rows); // bottom of the source (incl. its ledger rows)
-	const clone = rows.map((r) => blankRow(lines[r]));
+	const span = systemSpan(lines, b, cur);
+	if (!span) return null;
+	// clone the WHOLE system emptied — staff lines, interior blanks, and the
+	// H:/L: rows (keeping their labels) — so the new stave has the same scaffolding.
+	const [top, bot] = span;
+	const clone: string[] = [];
+	for (let i = top; i <= bot; i++) clone.push(blankRow(lines[i]));
 	// 2 empty lines separate staves (ledger notes reach at most 1 empty line out,
 	// so a 2-line gap keeps the staves distinct). Pad both sides.
 	const block = ["", "", ...clone, "", ""];
 	const inner = lines.slice(b.start, b.end + 1);
-	const at = insertAfter - b.start + 1;
+	const at = bot - b.start + 1;
 	inner.splice(at, 0, ...block);
-	const topDoc = b.start + at + 2; // skip the 2 blank lines -> first staff row
-	const s = gridStart(clone[0]);
+	// cursor on the first staff/note row of the new stave (skip leading H:/L:)
+	let firstGrid = clone.findIndex((t) => gridStart(t) >= 0);
+	if (firstGrid < 0) firstGrid = 0;
+	const topDoc = b.start + at + 2 + firstGrid;
+	const s = gridStart(clone[firstGrid]);
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topDoc, ch: s >= 0 ? s : 0 } };
 }
 
-/** Empty a grid row: keep its label/gutter and barlines, replace notes with fill. */
+/** Empty a row: keep its label/gutter and barlines, replace content with fill.
+ *  Handles staff/note rows, H:/L: rows, and blank interior rows. */
 function blankRow(text: string): string {
+	if (text.trim() === "") return "";
+	const hl = text.match(/^\s*[HhLl]\s*:\s?/); // H:/L: -> keep label, blank chords/lyrics (space)
+	if (hl) return text.slice(0, hl[0].length) + text.slice(hl[0].length).replace(/[^|]/g, " ");
 	const s = gridStart(text);
 	const f = fillChar(text);
 	// labelled row (tab `e:`) -> keep the label; otherwise keep the leading gutter
