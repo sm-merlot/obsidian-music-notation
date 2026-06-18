@@ -551,6 +551,10 @@ class MusicNotationSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
+			.setName("Version")
+			.setDesc(`Music Notation v${this.plugin.manifest.version}`);
+
+		new Setting(containerEl)
 			.setName("Stave size")
 			.setDesc(
 				"Comfortable reading size for the music. Stays fixed — bars wrap onto new lines to fill the available width (reopen notes to apply)."

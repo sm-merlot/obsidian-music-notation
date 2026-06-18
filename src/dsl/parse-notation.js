@@ -231,9 +231,23 @@ function resolveStaff(sys, dir, clefType) {
 	let segStart = 0;
 	if (hasOpenBar) { segStart = bnds[0] + 1; bnds = bnds.slice(1); }
 
+	// If the staff is CLOSED (its lines end at the last barline), there's no bar
+	// after that barline — so stray notes drawn past it (e.g. a ledger row that runs
+	// long) don't create a spurious trailing bar. If a staff line runs past the last
+	// barline (an open final bar), keep going to the full width.
+	const lastBar = bounds.length ? bounds[bounds.length - 1] : -1;
+	let staffPast = false;
+	if (lastBar >= 0)
+		for (const r of rows) {
+			if (!isStaffLine(r)) continue;
+			for (let c = lastBar + 1; c < r.length; c++) if (r[c] !== " ") { staffPast = true; break; }
+			if (staffPast) break;
+		}
+	const gridEnd = lastBar >= 0 && !staffPast ? lastBar : width;
+
 	const segs = [];
 	let start = segStart;
-	for (const b of bnds.concat([width])) { segs.push([start, b]); start = b + 1; }
+	for (const b of bnds.concat([gridEnd])) { segs.push([start, b]); start = b + 1; }
 
 	// With an opening barline, read H:/L: in absolute columns (ignoring any `|`
 	// the user drew there); otherwise use the label-stripped (relative) form.
