@@ -335,6 +335,35 @@ export function insertColumn(lines: string[], pos: Pos): Edit | null {
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: c + 1 } };
 }
 
+/** Remove a padding column (at or just-left of the cursor) across every row of the
+ *  set. Only removes if that column is all-space in the set (won't eat notes/bars). */
+export function removeColumn(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
+	if (!b) return null;
+	const d = directives(lines, b);
+	let top: number;
+	let bot: number;
+	if (d.mode === "notation") {
+		[top, bot] = chunkSpan(lines, b, pos.line);
+	} else {
+		const sp = systemSpan(lines, b, pos.line);
+		if (!sp) return null;
+		[top, bot] = sp;
+	}
+	const rowsIdx: number[] = [];
+	for (let r = top; r <= bot; r++) if (gridStart(lines[r]) >= 0 || isHL(lines[r])) rowsIdx.push(r);
+	if (!rowsIdx.length) return null;
+	const isPad = (c: number) => c >= 0 && rowsIdx.every((r) => lines[r][c] === undefined || lines[r][c] === " ");
+	const rc = isPad(pos.ch) ? pos.ch : isPad(pos.ch - 1) ? pos.ch - 1 : -1;
+	if (rc < 0) return null; // not a padding column
+	const inner = lines.slice(b.start, b.end + 1);
+	for (const r of rowsIdx) {
+		const i = r - b.start;
+		if (rc < inner[i].length) inner[i] = inner[i].slice(0, rc) + inner[i].slice(rc + 1);
+	}
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: rc } };
+}
+
 /** One-command entry: empty block -> scaffold staff; blank line -> new stave;
  *  on a grid row -> add a bar. */
 export function addBarOrSystem(lines: string[], pos: Pos): Edit | null {
