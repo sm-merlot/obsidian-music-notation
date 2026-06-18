@@ -3,8 +3,8 @@
 // the SVG afterwards; pitches are irrelevant, fixed to B4). Staff 2 is the TAB
 // staff with explicit string/fret. Both voices share the event rhythm.
 
-const DIV = 8; // divisions per quarter -> 32nd = 1
-const esc = (s) =>
+export const DIV = 8; // divisions per quarter -> 32nd = 1
+export const esc = (s) =>
 	String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const BASES = [
@@ -16,7 +16,7 @@ const BASES = [
 	[0.03125, "32nd"],
 ];
 
-function durParts(durFrac) {
+export function durParts(durFrac) {
 	let base = BASES[BASES.length - 1];
 	for (const b of BASES) {
 		if (b[0] <= durFrac + 1e-9) {
@@ -29,13 +29,13 @@ function durParts(durFrac) {
 	return { type: base[1], dots, div: Math.max(1, Math.round(durFrac * 4 * DIV)) };
 }
 
-function dotsXml(n) {
+export function dotsXml(n) {
 	return "<dot/>".repeat(n);
 }
 
 // Chord name -> <harmony>. The literal suffix is shown via kind@text so jazz
 // chords (Cmaj7#11, Cm7b5, G/B) display exactly as written.
-function harmonyXml(name) {
+export function harmonyXml(name) {
 	const m = name.match(/^([A-G][#b]?)([^/]*)(?:\/([A-G][#b]?))?$/);
 	if (!m) return "";
 	const alt = (a) => (a === "#" ? 1 : a === "b" ? -1 : 0);
@@ -60,9 +60,9 @@ function harmonyXml(name) {
 
 // Beam roles for a bar's events: group beamable notes (eighth or shorter) that
 // fall within the same beat. Verovio honors encoded <beam>s and won't auto-beam.
-function beamRoles(events, beatFrac) {
+export function beamRoles(events, beatFrac) {
 	const n = events.length;
-	const beamable = events.map((e) => e.durFrac <= 0.125 + 1e-9);
+	const beamable = events.map((e) => !e.rest && e.durFrac <= 0.125 + 1e-9);
 	const beat = [];
 	let pos = 0;
 	for (const e of events) {
@@ -90,7 +90,7 @@ function beamRoles(events, beatFrac) {
 
 // Syllabification across the whole stream: a trailing '-' means the word
 // continues; track the previous syllable to pick begin/middle/end/single.
-function makeSyllabifier() {
+export function makeSyllabifier() {
 	let prevHyphen = false;
 	return (raw) => {
 		const trailing = raw.endsWith("-");

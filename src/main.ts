@@ -11,6 +11,8 @@ import { VerovioToolkit } from "verovio/esm";
 import { tabSrcToSections, stripNotationStaff } from "./dsl/pipeline.js";
 import { parseChords, chordParts } from "./dsl/chords.js";
 import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
+import { parseNotation } from "./dsl/parse-notation.js";
+import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -168,6 +170,9 @@ export default class MusicNotationPlugin extends Plugin {
 							this.renderSvg(tk, sec.xml, "musicxml", px, true, sec.connections)
 						);
 					}
+				} else if (dsl && dslMode(source) === "notation") {
+					const xml = notationToMusicXML(parseNotation(source));
+					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false));
 				} else {
 					const { inputFrom, data, strip } = this.prepare(source, dsl);
 					target.appendChild(this.renderSvg(tk, data, inputFrom, px, strip));

@@ -58,7 +58,12 @@ fretboard diagrams renders at the top. Frets are low-E→high-e (matching `tunin
 `x` = muted, `0` = open — e.g. `chord D = x x 0 2 3 2`, `chord Em = 0 2 2 0 0 0`, or
 compact `chord C = x32010`.
 
-`mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano).
+`mode: notation` is an **ASCII staff** you draw: rows of `-` are the 5 staff lines,
+blank rows between are spaces, and each row is one pitch step (anchored by `clef:` +
+`key:`). A note is `x` (natural-in-key), `#`, `b` or `n` at its row+column; `_`
+sustains it (duration); `|` = barline; `[Section]` separates staves. `L:` lyrics and
+`H:` chords render on the staff. It engraves to real notation (jazz lead sheets,
+vocal/piano).
 
 ### `music-verovio` — raw escape hatch
 
