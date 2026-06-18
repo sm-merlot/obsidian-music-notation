@@ -44,23 +44,28 @@ export function parseDirectives(lines) {
 const CONNECTORS = "hps^";
 
 // Tokenize one string's bar content into [{col, fret, conn}] onsets. `-` = no
-// onset. A multi-digit fret starts at its first digit's column. `conn` is the
-// connector char seen since the previous onset (links this note to the prior).
+// onset. Each column is a time slot, so EACH digit is its own note (e.g. `333`
+// = three separate frets, not fret 333). A fret of 10+ is written in parens —
+// `(12)` — occupying one slot. `conn` is the connector char since the previous
+// onset (links this note to the prior).
 function onsetsFor(barText) {
 	const onsets = [];
 	let pendingConn = null;
 	for (let i = 0; i < barText.length; i++) {
 		const c = barText[i];
-		if (c >= "0" && c <= "9") {
-			let j = i;
-			let num = "";
-			while (j < barText.length && barText[j] >= "0" && barText[j] <= "9") {
-				num += barText[j];
-				j++;
+		if (c === "(") {
+			const close = barText.indexOf(")", i);
+			const num = close > i ? barText.slice(i + 1, close).replace(/[^0-9]/g, "") : "";
+			if (num) {
+				onsets.push({ col: i, fret: Number(num), conn: pendingConn });
+				pendingConn = null;
+				i = close;
+				continue;
 			}
-			onsets.push({ col: i, fret: Number(num), conn: pendingConn });
+		}
+		if (c >= "0" && c <= "9") {
+			onsets.push({ col: i, fret: Number(c), conn: pendingConn });
 			pendingConn = null;
-			i = j - 1;
 		} else if (CONNECTORS.includes(c) && onsets.length) {
 			pendingConn = c; // only meaningful between two frets
 		}
