@@ -9,6 +9,7 @@ import {
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
 import { tabSrcToSections, stripNotationStaff } from "./dsl/pipeline.js";
+import { parseChords, chordParts } from "./dsl/chords.js";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -143,7 +144,9 @@ export default class MusicNotationPlugin extends Plugin {
 			try {
 				const px = this.fitWidth(container, el);
 				target.empty();
-				if (dsl && dslMode(source) === "tab") {
+				if (dsl && dslMode(source) === "chords") {
+					this.renderChords(source, target);
+				} else if (dsl && dslMode(source) === "tab") {
 					// Render each section as its own SVG so it starts on a new
 					// line and wraps independently. Labels are themed headings.
 					const { directives, sections } = tabSrcToSections(source);
@@ -242,6 +245,59 @@ export default class MusicNotationPlugin extends Plugin {
 		}
 		if (strip) stripNotationStaff(svgEl, connections);
 		return svgEl;
+	}
+
+	/**
+	 * Chord-over-lyric mode: render as HTML that wraps word-by-word, each chord
+	 * glued above its word (so it stays aligned on any width). No engraving.
+	 */
+	private renderChords(source: string, target: HTMLElement) {
+		const { directives, blocks } = parseChords(source);
+		if (directives.capo) {
+			target.createDiv({
+				cls: "music-notation-tuning",
+				text: `Capo ${directives.capo}`,
+			});
+		}
+		// one chord name → root span + superscript extension
+		const chordName = (parent: HTMLElement, name: string) => {
+			const { root, ext } = chordParts(name);
+			const cs = parent.createSpan({ cls: "cl-chord-name" });
+			cs.createSpan({ cls: "cl-root", text: root });
+			if (ext) cs.createEl("sup", { cls: "cl-ext", text: ext });
+		};
+		// chord stack above a word (one or more chords)
+		const chordsAbove = (word: HTMLElement, names: string[]) => {
+			const c = word.createSpan({ cls: "cl-chord" });
+			names.forEach((n, i) => {
+				if (i) c.appendText(" ");
+				chordName(c, n);
+			});
+		};
+		for (const b of blocks) {
+			if (b.type === "section") {
+				target.createDiv({ cls: "music-notation-section", text: b.label });
+			} else if (b.type === "blank") {
+				target.createDiv({ cls: "cl-gap" });
+			} else if (b.type === "chordline") {
+				const line = target.createDiv({ cls: "cl-line cl-chordline" });
+				for (const name of b.chords) {
+					const w = line.createSpan({ cls: "cl-word cl-lead" });
+					chordsAbove(w, [name]);
+				}
+			} else if (b.type === "line") {
+				const line = target.createDiv({ cls: "cl-line" });
+				if (b.lead && b.lead.length) {
+					const w = line.createSpan({ cls: "cl-word cl-lead" });
+					chordsAbove(w, b.lead);
+				}
+				for (const wd of b.words) {
+					const w = line.createSpan({ cls: "cl-word" });
+					if (wd.chords.length) chordsAbove(w, wd.chords);
+					w.createSpan({ cls: "cl-text", text: wd.text });
+				}
+			}
+		}
 	}
 
 	/**

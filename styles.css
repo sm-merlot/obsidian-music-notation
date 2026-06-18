@@ -58,6 +58,44 @@
 	margin-bottom: 6px;
 }
 
+/* Chord-over-lyric mode: words wrap, chords stay glued above their word. */
+.cl-line {
+	padding-top: 1.4em;
+	line-height: 1.75;
+	margin: 0.1em 0;
+}
+.cl-word {
+	position: relative;
+	display: inline-block;
+	margin-right: 0.28em;
+	white-space: pre;
+}
+.cl-chord {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	white-space: nowrap;
+	font-weight: 600;
+	font-size: 0.85em;
+	line-height: 1.1;
+	color: var(--text-accent);
+}
+.cl-chord-name {
+	display: inline-block;
+}
+.cl-ext {
+	font-size: 0.72em;
+}
+.cl-chordline .cl-chord,
+.cl-lead .cl-chord {
+	position: static;
+	display: inline-block;
+	margin-right: 0.6em;
+}
+.cl-gap {
+	height: 0.55em;
+}
+
 .music-notation-section {
 	font-weight: 600;
 	color: var(--text-normal);

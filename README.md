@@ -43,8 +43,12 @@ Each digit is its own note (a column is a time slot), so `333` = three notes. Fo
 fret of 10 or more, end it with `)` — which groups the last two digits: `12)3` =
 fret twelve then three; `312)` = fret three then twelve.
 
-`mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano). The
-`chords` mode (chord-over-lyric) is coming.
+`mode: chords` is a chord-over-lyric sheet: `H:` chord rows over `L:` lyric rows
+(column-aligned). It renders as HTML that **wraps word-by-word with each chord glued
+above its word**, so it stays aligned at any width — and chord symbols get nice ♯/♭
+and superscript extensions. Chord-only lines (intros) and `[Section]` labels work too.
+
+`mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano).
 
 ### `music-verovio` — raw escape hatch
 
