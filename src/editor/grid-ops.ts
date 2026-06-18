@@ -305,6 +305,39 @@ function createStaves(lines: string[], b: Block, pos: Pos): Edit {
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: b.start + at + fg, ch } };
 }
 
+/** Insert a padding column across every row of the set at the cursor's column, so
+ *  rows shift together and stay aligned. Tab inserts a space (free padding); notation
+ *  inserts each row's fill (dash on staff lines, space on note/H:/L: rows). */
+export function insertColumn(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
+	if (!b) return null;
+	const d = directives(lines, b);
+	let top: number;
+	let bot: number;
+	if (d.mode === "notation") {
+		[top, bot] = chunkSpan(lines, b, pos.line);
+	} else {
+		const sp = systemSpan(lines, b, pos.line);
+		if (!sp) return null;
+		[top, bot] = sp;
+	}
+	const c = pos.ch;
+	const inner = lines.slice(b.start, b.end + 1);
+	let any = false;
+	for (let r = top; r <= bot; r++) {
+		const hl = isHL(lines[r]);
+		if (gridStart(lines[r]) < 0 && !hl) continue; // skip blanks / other
+		any = true;
+		const i = r - b.start;
+		const rowFill = hl ? " " : fillChar(lines[r]);
+		const insertChar = d.mode === "tab" ? " " : rowFill;
+		const row = inner[i].length < c ? inner[i] + rowFill.repeat(c - inner[i].length) : inner[i];
+		inner[i] = row.slice(0, c) + insertChar + row.slice(c);
+	}
+	if (!any) return null;
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: c + 1 } };
+}
+
 /** One-command entry: empty block -> scaffold staff; blank line -> new stave;
  *  on a grid row -> add a bar. */
 export function addBarOrSystem(lines: string[], pos: Pos): Edit | null {

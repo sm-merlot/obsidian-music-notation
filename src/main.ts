@@ -16,7 +16,7 @@ import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
-import { addBarOrSystem, addContinuation, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
+import { addBarOrSystem, addContinuation, insertColumn, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -166,6 +166,11 @@ export default class MusicNotationPlugin extends Plugin {
 			id: "music-add-continuation",
 			name: "Continue staves on a new line (===)",
 			editorCallback: (editor) => apply(editor, addContinuation, "Place the cursor in a music staff first"),
+		});
+		this.addCommand({
+			id: "music-insert-column",
+			name: "Insert padding column (whole stave)",
+			editorCallback: (editor) => apply(editor, insertColumn, "Place the cursor in a music staff first"),
 		});
 		this.addCommand({
 			id: "music-format",
