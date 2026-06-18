@@ -111,6 +111,9 @@ unit: 1/16
 (three pitches snapped to an eighth-note triplet; widen the bracket to 8 for a crotchet
 triplet.)
 
+The count is generic: `5( … )` is a quintuplet (5 in the time of 4), `6(…)`, `7(…)` etc.
+all work — pick a `unit:` fine enough to draw that many noteheads in the span.
+
 **Transpose (per sheet)** — add `transpose:` to the header of a `chords` or `notation`
 block and it shifts everything: write the chart in concert pitch, set `transpose: Bb`
 and a trumpet player reads it in their key. Value is an **instrument** (`Bb`, `Eb`,
