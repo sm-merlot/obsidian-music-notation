@@ -175,17 +175,17 @@ function resolveSystem(sys, dir) {
 					if (sp.start > cursor) events.push({ col: cursor, rest: true, durFrac: (sp.start - cursor) * dir.unitFrac, notes: [] });
 					const actual = sp.n || members.length;
 					const normal = tupletNormal(actual);
-					const total = normal * dir.unitFrac; // tuplet group fills `normal` units
-					// each note's length = its share of the column spacing inside the bracket
-					const ends = members.map((mc, k) => (k < members.length - 1 ? members[k + 1] : sp.close));
-					const weights = members.map((mc, k) => Math.max(1, ends[k] - mc));
-					const totW = weights.reduce((a, b) => a + b, 0);
+					// the bracket's interior width = the tuplet's played length (in
+					// units); triplet notes can't land on exact power-of-two columns,
+					// so the notes inside snap to N EVEN slots within that length.
+					const total = (sp.close - sp.open - 1) * dir.unitFrac;
+					const n = members.length;
 					members.forEach((mc, k) => {
 						events.push({
 							col: mc,
-							durFrac: total * (weights[k] / totW),
+							durFrac: total / n,
 							notes: onsetsByCol.get(mc),
-							tuplet: { actual, normal, pos: k === 0 ? "start" : k === members.length - 1 ? "stop" : "mid" },
+							tuplet: { actual, normal, pos: k === 0 ? "start" : k === n - 1 ? "stop" : "mid" },
 						});
 					});
 					cursor = sp.close + 1;

@@ -87,26 +87,29 @@ x   |
 ````
 (a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
 
-**Triplets / tuplets** — bracket a group with `n( … )` (bare `(` = a triplet). The
-parens mark a **column span**, and every note whose column falls inside — on any row —
-joins the tuplet, so a melodic triplet across three pitches works. The group is squeezed
-into its normal beat (3 in the time of 2), and the spacing inside sets each note's
-relative length: `3(x--x--x--)` is an even triplet, `3(x-x--x)` is long-short. For a
-melody, draw the bracket on its own line above the staff:
+**Triplets / tuplets** — bracket a group with `n( … )` (bare `(` = a triplet). Triplet
+notes can't land on exact power-of-two columns, so the bracket **quantises** the notes
+inside to even tuplet slots: its **interior width = the played length** of the group,
+and the notes within (on any row — a melodic triplet across pitches works) snap to that
+many equal divisions. The count digit + parens are zero-time annotation.
+
+Pick a fine `unit:` so the length is expressible — at `unit: 1/16` a quaver triplet is
+4 columns wide (one crotchet), a crotchet triplet is 8 (one minim) — and you can mix
+both in a bar:
 
 ````markdown
 ```music
 mode: notation
-unit: 1/8
+unit: 1/16
 
-3(          )
-        x
-     x
+3(----)              quaver triplet (4 cols = 1 crotchet)
+    x
+   x
   x
-----------------
 ```
 ````
-(three different pitches under one bracket = an eighth-note triplet.)
+(three pitches snapped to an eighth-note triplet; widen the bracket to 8 for a crotchet
+triplet.)
 
 **Transpose (per sheet)** — add `transpose:` to the header of a `chords` or `notation`
 block and it shifts everything: write the chart in concert pitch, set `transpose: Bb`
