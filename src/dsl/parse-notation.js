@@ -155,6 +155,14 @@ function resolveStaff(sys, dir, clefType) {
 	clefType = normClef(clefType);
 	const rows = sys.rows;
 	const width = Math.max(0, ...rows.map((r) => r.length));
+	// A column that is all-space across the staff rows is PADDING — visual spacing
+	// (like tab's space) that does NOT advance time. Map char-column -> time-column
+	// so durations/rests count only non-padding columns.
+	const padCol = (c) => rows.every((r) => r[c] === undefined || r[c] === " ");
+	const tcolArr = [0];
+	for (let c = 0; c < width; c++) tcolArr[c + 1] = tcolArr[c] + (padCol(c) ? 0 : 1);
+	const tcol = (c) => tcolArr[Math.max(0, Math.min(width, c))];
+	const dur = (a, b) => (tcol(b) - tcol(a)) * dir.unitFrac;
 	// A STAFF line spans (most of) the width; a short dash is a ledger line
 	// (cosmetic). Anchor on the lowest full-width dash row = bottom staff line.
 	const dashCount = (r) => (r.match(/-/g) || []).length;
@@ -248,13 +256,13 @@ function resolveStaff(sys, dir, clefType) {
 					// gather every onset column inside this bracket = tuplet members
 					const members = [];
 					while (i < cols.length && cols[i] > sp.open && cols[i] < sp.close) members.push(cols[i++]);
-					if (sp.start > cursor) events.push({ col: cursor, rest: true, durFrac: (sp.start - cursor) * dir.unitFrac, notes: [] });
+					if (sp.start > cursor) events.push({ col: cursor, rest: true, durFrac: dur(cursor, sp.start), notes: [] });
 					const actual = sp.n || members.length;
 					const normal = tupletNormal(actual);
-					// the bracket's interior width = the tuplet's played length (in
-					// units); triplet notes can't land on exact power-of-two columns,
-					// so the notes inside snap to N EVEN slots within that length.
-					const total = (sp.close - sp.open - 1) * dir.unitFrac;
+					// the bracket's interior width = the tuplet's played length (non-
+					// padding columns); triplet notes can't land on exact power-of-two
+					// columns, so the notes inside snap to N EVEN slots within that length.
+					const total = dur(sp.open + 1, sp.close);
 					const n = members.length;
 					members.forEach((mc, k) => {
 						events.push({
@@ -267,14 +275,14 @@ function resolveStaff(sys, dir, clefType) {
 					cursor = sp.close + 1;
 					continue;
 				}
-				if (c > cursor) events.push({ col: cursor, rest: true, durFrac: (c - cursor) * dir.unitFrac, notes: [] });
+				if (c > cursor) events.push({ col: cursor, rest: true, durFrac: dur(cursor, c), notes: [] });
 				const notes = onsetsByCol.get(c);
 				const span = Math.max(...notes.map((n) => n.span));
-				events.push({ col: c, durFrac: span * dir.unitFrac, notes });
+				events.push({ col: c, durFrac: dur(c, c + span), notes });
 				cursor = c + span;
 				i++;
 			}
-			if (cursor < e) events.push({ col: cursor, rest: true, durFrac: (e - cursor) * dir.unitFrac, notes: [] });
+			if (cursor < e) events.push({ col: cursor, rest: true, durFrac: dur(cursor, e), notes: [] });
 			// lyrics attach to the nearest note (they need a notehead)
 			const noteEvents = events.filter((ev) => !ev.rest && ev.col >= s && ev.col < e);
 			const nearest = (col) => noteEvents.reduce((best, ev) => (best == null || Math.abs(ev.col - col) < Math.abs(best.col - col) ? ev : best), null);

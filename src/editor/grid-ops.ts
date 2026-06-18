@@ -305,9 +305,9 @@ function createStaves(lines: string[], b: Block, pos: Pos): Edit {
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: b.start + at + fg, ch } };
 }
 
-/** Insert a padding column across every row of the set at the cursor's column, so
- *  rows shift together and stay aligned. Tab inserts a space (free padding); notation
- *  inserts each row's fill (dash on staff lines, space on note/H:/L: rows). */
+/** Insert a padding column (a space) across every row of the set at the cursor's
+ *  column, so rows shift together and stay aligned. The space is free padding — it
+ *  doesn't advance the beat in tab OR notation (an all-space column = zero time). */
 export function insertColumn(lines: string[], pos: Pos): Edit | null {
 	const b = blockAt(lines, pos.line);
 	if (!b) return null;
@@ -325,14 +325,11 @@ export function insertColumn(lines: string[], pos: Pos): Edit | null {
 	const inner = lines.slice(b.start, b.end + 1);
 	let any = false;
 	for (let r = top; r <= bot; r++) {
-		const hl = isHL(lines[r]);
-		if (gridStart(lines[r]) < 0 && !hl) continue; // skip blanks / other
+		if (gridStart(lines[r]) < 0 && !isHL(lines[r])) continue; // skip blanks / other
 		any = true;
 		const i = r - b.start;
-		const rowFill = hl ? " " : fillChar(lines[r]);
-		const insertChar = d.mode === "tab" ? " " : rowFill;
-		const row = inner[i].length < c ? inner[i] + rowFill.repeat(c - inner[i].length) : inner[i];
-		inner[i] = row.slice(0, c) + insertChar + row.slice(c);
+		const row = inner[i].length < c ? inner[i] + " ".repeat(c - inner[i].length) : inner[i];
+		inner[i] = row.slice(0, c) + " " + row.slice(c);
 	}
 	if (!any) return null;
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: c + 1 } };
