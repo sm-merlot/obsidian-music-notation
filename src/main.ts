@@ -16,7 +16,7 @@ import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
-import { addBar, addSystem, formatBlock, Edit } from "./editor/grid-ops";
+import { addBar, addSystem, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -137,9 +137,10 @@ export default class MusicNotationPlugin extends Plugin {
 		this.registerEditorExtension(musicGridExtension());
 
 		// Commands that scaffold/tidy the ASCII grid.
-		const apply = (editor: Editor, fn: (lines: string[], cur: number) => Edit | null, fail: string) => {
+		const apply = (editor: Editor, fn: (lines: string[], pos: Pos) => Edit | null, fail: string) => {
 			const lines = editor.getValue().split("\n");
-			const e = fn(lines, editor.getCursor().line);
+			const cur = editor.getCursor();
+			const e = fn(lines, { line: cur.line, ch: cur.ch });
 			if (!e) {
 				new Notice(fail);
 				return;
@@ -158,8 +159,13 @@ export default class MusicNotationPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "music-add-system",
-			name: "Add system / stave below",
+			name: "Add bar on a new line (new stave)",
 			editorCallback: (editor) => apply(editor, addSystem, "Add system works in a tab music block"),
+		});
+		this.addCommand({
+			id: "music-remove-bar",
+			name: "Remove bar at cursor",
+			editorCallback: (editor) => apply(editor, removeBar, "Place the cursor in a music grid bar first"),
 		});
 		this.addCommand({
 			id: "music-format",

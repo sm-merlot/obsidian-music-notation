@@ -11,7 +11,7 @@ export function gridStart(text: string): number {
 	if (DIRECTIVE.test(text)) return -1;
 	if (/^\s*[HhLl]\s*:/.test(text)) return -1;
 	if (/^\s*\[.*\]\s*$/.test(text)) return -1;
-	const lab = text.match(/^(\s*[A-Ga-g][#b]?\s*:\s?)(.*)$/);
+	const lab = text.match(/^(\s*[A-Ga-g][#b]?\s*:\s*)(.*)$/);
 	const start = lab ? lab[1].length : 0;
 	const content = text.slice(start);
 	if (content === "" || !GRID.test(content) || !GRID_TOKEN.test(content)) return -1;
@@ -130,6 +130,11 @@ function systemGridRows(lines: string[], b: Block, line: number): number[] {
 	return rows;
 }
 
+export interface Pos {
+	line: number;
+	ch: number;
+}
+
 export interface Edit {
 	start: number; // inner block range to replace (0-based, inclusive)
 	end: number;
@@ -139,7 +144,8 @@ export interface Edit {
 
 /** Append a fresh empty bar (`|` + a measure of fill) to every grid row in the
  *  current system, after padding them to equal width so barlines line up. */
-export function addBar(lines: string[], cur: number): Edit | null {
+export function addBar(lines: string[], pos: Pos): Edit | null {
+	const cur = pos.line;
 	const b = blockAt(lines, cur);
 	if (!b) return null;
 	const rows = systemGridRows(lines, b, cur);
@@ -148,7 +154,7 @@ export function addBar(lines: string[], cur: number): Edit | null {
 	const w = unitsPerBar(d);
 	const inner = lines.slice(b.start, b.end + 1);
 	const maxLen = Math.max(...rows.map((r) => lines[r].length));
-	let cursorLine = rows[0];
+	const cursorLine = rows.includes(cur) ? cur : rows[0];
 	for (const r of rows) {
 		const i = r - b.start;
 		const padded = inner[i] + fillChar(lines[r]).repeat(maxLen - lines[r].length);
@@ -159,7 +165,8 @@ export function addBar(lines: string[], cur: number): Edit | null {
 
 /** Add a new blank system (stave) below the current one. Tab only (derives the
  *  string rows from `tuning`, drawn high→low). */
-export function addSystem(lines: string[], cur: number): Edit | null {
+export function addSystem(lines: string[], pos: Pos): Edit | null {
+	const cur = pos.line;
 	const b = blockAt(lines, cur);
 	if (!b) return null;
 	const d = directives(lines, b);
@@ -181,8 +188,8 @@ export function addSystem(lines: string[], cur: number): Edit | null {
 
 /** Align every system in the block: pad each row's bars to the per-column max so
  *  barlines `|` line up across all rows. */
-export function formatBlock(lines: string[], cur: number): Edit | null {
-	const b = blockAt(lines, cur);
+export function formatBlock(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
 	if (!b) return null;
 	const inner = lines.slice(b.start, b.end + 1);
 	// group consecutive grid rows into systems
@@ -194,18 +201,56 @@ export function formatBlock(lines: string[], cur: number): Edit | null {
 		}
 		let j = i;
 		while (j + 1 < inner.length && gridStart(inner[j + 1]) >= 0) j++;
-		alignSystem(inner, i, j);
+		alignRows(inner, range(i, j));
 		i = j + 1;
 	}
-	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cur, ch: 0 } };
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: 0 } };
 }
 
-function alignSystem(inner: string[], from: number, to: number) {
-	const rows = [];
-	for (let i = from; i <= to; i++) {
-		const s = gridStart(inner[i]);
-		rows.push({ i, label: inner[i].slice(0, s), bars: inner[i].slice(s).split("|"), fill: fillChar(inner[i]) });
+/** Remove the bar the cursor sits in from every grid row of the system. */
+export function removeBar(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
+	if (!b) return null;
+	const rows = systemGridRows(lines, b, pos.line);
+	if (!rows.length) return null;
+	const inner = lines.slice(b.start, b.end + 1);
+	const idxs = rows.map((r) => r - b.start);
+	alignRows(inner, idxs); // equalise bar counts first
+	// which bar is the cursor in? count `|` before the cursor on its row
+	const curIdx = pos.line - b.start;
+	const onRow = idxs.includes(curIdx) ? curIdx : idxs[0];
+	const s = gridStart(inner[onRow]);
+	const ch = pos.line - b.start === onRow ? Math.max(pos.ch, s) : s;
+	const before = inner[onRow].slice(s, ch);
+	const barIndex = (before.match(/\|/g) || []).length;
+	let newCh = s;
+	for (const i of idxs) {
+		const s2 = gridStart(inner[i]);
+		const bars = inner[i].slice(s2).split("|");
+		if (bars.length <= 1) continue;
+		bars.splice(Math.min(barIndex, bars.length - 1), 1);
+		inner[i] = inner[i].slice(0, s2) + bars.join("|");
+		if (i === onRow) {
+			// cursor at the start of the bar that shifted into this slot
+			const keep = bars.slice(0, Math.min(barIndex, bars.length)).join("|");
+			newCh = s2 + keep.length + (barIndex > 0 && barIndex <= bars.length ? 1 : 0);
+		}
 	}
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: pos.line, ch: newCh } };
+}
+
+function range(a: number, b: number): number[] {
+	const out = [];
+	for (let i = a; i <= b; i++) out.push(i);
+	return out;
+}
+
+/** Pad each row's bars to the per-column max so barlines line up across rows. */
+function alignRows(inner: string[], idxs: number[]) {
+	const rows = idxs.map((i) => {
+		const s = gridStart(inner[i]);
+		return { i, label: inner[i].slice(0, s), bars: inner[i].slice(s).split("|"), fill: fillChar(inner[i]) };
+	});
 	const nb = Math.max(...rows.map((r) => r.bars.length));
 	const widths: number[] = [];
 	for (let k = 0; k < nb; k++) widths[k] = Math.max(0, ...rows.map((r) => (r.bars[k] !== undefined ? r.bars[k].length : 0)));
