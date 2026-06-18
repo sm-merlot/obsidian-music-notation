@@ -4,6 +4,7 @@ import {
 	PluginSettingTab,
 	Setting,
 	MarkdownPostProcessorContext,
+	MarkdownRenderChild,
 } from "obsidian";
 import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
@@ -50,8 +51,6 @@ export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
 	/** Verovio toolkit is created once (WASM init is expensive) and reused. */
 	private toolkit: Promise<VerovioToolkit> | null = null;
-	private rafId = 0;
-	private saveTimer = 0;
 
 	async onload() {
 		await this.loadSettings();
@@ -108,11 +107,10 @@ export default class MusicNotationPlugin extends Plugin {
 	private async renderBlock(
 		source: string,
 		el: HTMLElement,
-		_ctx: MarkdownPostProcessorContext,
+		ctx: MarkdownPostProcessorContext,
 		dsl: boolean
 	) {
 		const container = el.createDiv({ cls: "music-notation" });
-		const controls = container.createDiv({ cls: "music-notation-controls" });
 		const target = container.createDiv({ cls: "music-notation-render" });
 
 		let tk: VerovioToolkit;
@@ -151,8 +149,27 @@ export default class MusicNotationPlugin extends Plugin {
 			}
 		};
 
-		this.buildControls(controls, render);
 		render();
+
+		// Re-render when the block's width changes so bars reflow to fill the
+		// available space (stave size stays fixed; more/fewer bars per row —
+		// like wrapping text). Debounced; ignores height-only changes.
+		let lastW = container.clientWidth;
+		let timer = 0;
+		const ro = new ResizeObserver(() => {
+			const w = container.clientWidth;
+			if (!w || Math.abs(w - lastW) < 4) return;
+			lastW = w;
+			window.clearTimeout(timer);
+			timer = window.setTimeout(render, 120);
+		});
+		ro.observe(container);
+		const child = new MarkdownRenderChild(container);
+		child.register(() => {
+			ro.disconnect();
+			window.clearTimeout(timer);
+		});
+		ctx.addChild(child);
 	}
 
 	/** Render one MusicXML/ABC string to a themed SVG element (stripped for tab). */
@@ -206,44 +223,6 @@ export default class MusicNotationPlugin extends Plugin {
 	}
 
 	/**
-	 * In-document sliders that adjust this block's size and spacing live. They
-	 * seed from (and write back to) the global defaults so the last-used values
-	 * stick across reloads. Changes re-render only this block.
-	 */
-	private buildControls(bar: HTMLElement, render: () => void) {
-		const add = (
-			label: string,
-			key: "scale" | "spacing",
-			min: number,
-			max: number,
-			step: number
-		) => {
-			const wrap = bar.createDiv({ cls: "music-notation-control" });
-			wrap.createSpan({
-				cls: "music-notation-control-label",
-				text: label,
-			});
-			const input = wrap.createEl("input", { type: "range" });
-			input.min = String(min);
-			input.max = String(max);
-			input.step = String(step);
-			input.value = String(this.settings[key]);
-			const val = wrap.createSpan({
-				cls: "music-notation-control-val",
-				text: `${this.settings[key]}%`,
-			});
-			input.addEventListener("input", () => {
-				this.settings[key] = Number(input.value);
-				val.setText(`${input.value}%`);
-				this.scheduleSave();
-				this.scheduleRender(render);
-			});
-		};
-		add("Size", "scale", 20, 100, 5);
-		add("Spacing", "spacing", 80, 250, 10);
-	}
-
-	/**
 	 * Width the score should fill: the block's natural content width. We do NOT
 	 * break out of Obsidian's "Readable line length" — past attempts clipped
 	 * against ancestor overflow. To use the full window width, turn that setting
@@ -251,19 +230,6 @@ export default class MusicNotationPlugin extends Plugin {
 	 */
 	private fitWidth(container: HTMLElement, el: HTMLElement): number {
 		return container.clientWidth || el.clientWidth || 800;
-	}
-
-	private scheduleRender(render: () => void) {
-		if (this.rafId) cancelAnimationFrame(this.rafId);
-		this.rafId = requestAnimationFrame(() => {
-			this.rafId = 0;
-			render();
-		});
-	}
-
-	private scheduleSave() {
-		clearTimeout(this.saveTimer);
-		this.saveTimer = window.setTimeout(() => this.saveSettings(), 400);
 	}
 
 	private renderError(target: HTMLElement, message: string) {
@@ -293,9 +259,9 @@ class MusicNotationSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Render scale")
+			.setName("Stave size")
 			.setDesc(
-				"Size of the engraved music, as a percentage. Lower is smaller."
+				"Comfortable reading size for the music. Stays fixed — bars wrap onto new lines to fill the available width (reopen notes to apply)."
 			)
 			.addSlider((s) =>
 				s
@@ -309,9 +275,9 @@ class MusicNotationSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Note spacing")
+			.setName("Note spacing (advanced)")
 			.setDesc(
-				"Horizontal breathing room between notes and lyrics, as a percentage. Higher spreads the music out."
+				"Escape hatch for horizontal spacing. Spacing is handled automatically; raise this only if notes/lyrics feel cramped."
 			)
 			.addSlider((s) =>
 				s
