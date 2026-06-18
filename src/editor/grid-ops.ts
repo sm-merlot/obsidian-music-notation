@@ -260,9 +260,12 @@ function lastBarWidth(text: string): number {
 function createStaves(lines: string[], b: Block, pos: Pos): Edit {
 	const d = directives(lines, b);
 	const w = unitsPerBar(d);
+	// Left buffer so an H:/L: label (2 chars) can be prepended later with its `|`
+	// aligning to the staff's opening `|` — no need to shuffle the bar over.
+	const pad = "  ";
 	const staff5 = () => {
-		const line = "|" + "-".repeat(w) + "|";
-		const sp = "|" + " ".repeat(w) + "|";
+		const line = pad + "|" + "-".repeat(w) + "|";
+		const sp = pad + "|" + " ".repeat(w) + "|";
 		return [line, sp, line, sp, line, sp, line, sp, line]; // 5 lines + 4 spaces, top→bottom
 	};
 	let rows: string[];
