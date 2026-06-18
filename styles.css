@@ -58,6 +58,23 @@
 	margin-bottom: 6px;
 }
 
+/* View-only transpose dropdown above chords/notation sheets. */
+.music-notation-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.music-notation-toolbar-label {
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+}
+.music-notation-transpose {
+	font-size: var(--font-smaller);
+	height: auto;
+	padding: 2px 22px 2px 8px;
+}
+
 /* Chord-over-lyric mode: each word is a small box (chord lane on top, text
  * below) so words wrap word-by-word and every wrapped row keeps chord room. */
 .cl-line {

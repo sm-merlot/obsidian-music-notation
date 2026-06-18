@@ -186,13 +186,29 @@ export default class MusicNotationPlugin extends Plugin {
 			return;
 		}
 
+		const mode = dsl ? dslMode(source) : "";
+		// Ephemeral transpose: a dropdown above chords/notation sheets. Starts at
+		// the block's `transpose:` directive; changing it re-renders the view only
+		// (never edits the note). `null` = follow the directive.
+		let transposeOverride: number | null = null;
+		if (dsl && (mode === "chords" || mode === "notation")) {
+			const directiveSemis = transposeSemis(
+				(mode === "chords" ? parseChords(source) : parseNotation(source))
+					.directives.transpose
+			);
+			this.buildTransposeControl(container, target, directiveSemis, (v) => {
+				transposeOverride = v;
+				render();
+			});
+		}
+
 		const render = () => {
 			try {
 				const px = this.fitWidth(container, el);
 				target.empty();
 				if (dsl) this.drawChordChart(source, target);
 				if (dsl && dslMode(source) === "chords") {
-					this.renderChords(source, target);
+					this.renderChords(source, target, transposeOverride);
 				} else if (dsl && dslMode(source) === "tab") {
 					// Render each section as its own SVG so it starts on a new
 					// line and wraps independently. Labels are themed headings.
@@ -215,7 +231,7 @@ export default class MusicNotationPlugin extends Plugin {
 				} else if (dsl && dslMode(source) === "notation") {
 					const model = parseNotation(source);
 					const xml = notationToMusicXML(model);
-					const semis = transposeSemis(model.directives.transpose);
+					const semis = transposeOverride ?? transposeSemis(model.directives.transpose);
 					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false, undefined, semis));
 				} else {
 					const { inputFrom, data, strip } = this.prepare(source, dsl);
@@ -247,6 +263,39 @@ export default class MusicNotationPlugin extends Plugin {
 			window.clearTimeout(timer);
 		});
 		ctx.addChild(child);
+	}
+
+	/**
+	 * A small "Transpose" dropdown rendered above a chords/notation sheet. Purely
+	 * a view control — it re-renders the sheet at the chosen key but never edits
+	 * the note. Initial value follows the block's `transpose:` directive.
+	 */
+	private buildTransposeControl(
+		container: HTMLElement,
+		before: HTMLElement,
+		initial: number,
+		onChange: (semis: number | null) => void
+	) {
+		const bar = createDiv({ cls: "music-notation-toolbar" });
+		bar.createSpan({ cls: "music-notation-toolbar-label", text: "Transpose" });
+		const sel = bar.createEl("select", { cls: "music-notation-transpose dropdown" });
+		const opts: [string, number][] = [
+			["Concert", 0],
+			["B♭ (+2)", 2],
+			["E♭ (+9)", 9],
+			["F (+7)", 7],
+		];
+		for (const s of [1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]) {
+			if (opts.some(([, v]) => v === s)) continue;
+			opts.push([`${s > 0 ? "+" : ""}${s}`, s]);
+		}
+		for (const [label, v] of opts) {
+			const o = sel.createEl("option", { text: label });
+			o.value = String(v);
+		}
+		sel.value = String(initial);
+		sel.addEventListener("change", () => onChange(parseInt(sel.value, 10) || 0));
+		container.insertBefore(bar, before);
 	}
 
 	/** Render one MusicXML/ABC string to a themed SVG element (stripped for tab). */
@@ -362,14 +411,14 @@ export default class MusicNotationPlugin extends Plugin {
 	 * Chord-over-lyric mode: render as HTML that wraps word-by-word, each chord
 	 * glued above its word (so it stays aligned on any width). No engraving.
 	 */
-	private renderChords(source: string, target: HTMLElement) {
+	private renderChords(source: string, target: HTMLElement, override?: number | null) {
 		const parsed = parseChords(source) as {
 			directives: { capo?: string; transpose?: string };
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			blocks: any[];
 		};
 		const { directives, blocks } = parsed;
-		const semis = transposeSemis(directives.transpose);
+		const semis = override ?? transposeSemis(directives.transpose);
 		if (directives.capo) {
 			target.createDiv({
 				cls: "music-notation-tuning",
