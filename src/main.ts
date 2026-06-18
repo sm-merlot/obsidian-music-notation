@@ -39,7 +39,10 @@ function detectFormat(source: string): InputFormat {
 }
 
 /** Human caption for a tab's tuning + capo, e.g. "Standard tuning · Capo 2". */
-function tuningCaption(directives: { tuning?: string | null; capo?: number }): string {
+function tuningCaption(directives: {
+	tuning?: string | null;
+	capo?: string | number | null;
+}): string {
 	const labels = (directives.tuning || "e B G D A E").trim().split(/\s+/);
 	const eq = (a: string[]) =>
 		a.length === labels.length && a.every((x, i) => x === labels[i]);
@@ -47,8 +50,11 @@ function tuningCaption(directives: { tuning?: string | null; capo?: number }): s
 	if (eq(["e", "B", "G", "D", "A", "E"])) name = "Standard tuning";
 	else if (eq(["e", "B", "G", "D", "A", "D"])) name = "Drop D";
 	else name = labels.slice().reverse().join(" "); // low → high
-	const capo = Number(directives.capo) || 0;
-	return name + (capo > 0 ? ` · Capo ${capo}` : "");
+	// capo is free text: bare number -> "Capo N"; none/0/empty -> omit; else verbatim.
+	const raw = (directives.capo == null ? "" : String(directives.capo)).trim();
+	let capo = "";
+	if (raw && !/^(none|no|0)$/i.test(raw)) capo = /^\d+$/.test(raw) ? `Capo ${raw}` : raw;
+	return name + (capo ? ` · ${capo}` : "");
 }
 
 /** DSL mode from an explicit `mode:` directive, else inferred from the body. */

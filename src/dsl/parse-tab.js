@@ -24,12 +24,12 @@ function midiToPitch(midi) {
 }
 
 export function parseDirectives(lines) {
-	const d = { mode: "tab", meter: "4/4", unit: "1/8", tuning: null, capo: 0 };
+	// capo is free text (e.g. "2", "none", "my 2 / orig 4") — kept raw.
+	const d = { mode: "tab", meter: "4/4", unit: "1/8", tuning: null, capo: "" };
 	for (const l of lines) {
 		const m = l.match(/^\s*(mode|meter|unit|tuning|capo|title)\s*:\s*(.+?)\s*$/);
 		if (m) d[m[1]] = m[2];
 	}
-	d.capo = Number(d.capo) || 0;
 	const [beats, beatType] = d.meter.split("/").map(Number);
 	d.beats = beats;
 	d.beatType = beatType;
