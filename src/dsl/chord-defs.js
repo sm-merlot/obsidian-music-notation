@@ -1,9 +1,9 @@
 // Chord-shape definitions, shared by tab and chords modes. A line like:
-//   chord D = 2 3 2 0 x x        (frets high-e → low-E, matching `tuning:`)
-//   chord Em = 0 0 0 2 2 0
+//   chord C = x 3 2 0 1 0        (frets low-E → high-e, matching `tuning:`)
+//   chord Em = 0 2 2 0 0 0
 //   chord C = x32010             (compact: one char per string, single digits)
-// `x` = muted, `0` = open. Returns [{ name, strings }] where strings[0] is the
-// high e and strings[5] the low E; a string is null (muted) or a fret number.
+// `x` = muted, `0` = open. Frets are written low→high; returned `strings` is
+// reversed to high→low (strings[0] = high e, strings[5] = low E) for drawing.
 
 export function parseChordDefs(src) {
 	const defs = [];
@@ -14,6 +14,7 @@ export function parseChordDefs(src) {
 		const toks = /\s/.test(rest) ? rest.split(/\s+/) : rest.split("");
 		const strings = toks
 			.slice(0, 6)
+			.reverse() // low→high input → high→low internal
 			.map((t) => (/^x$/i.test(t) ? null : Number(t)))
 			.map((n) => (Number.isNaN(n) ? null : n));
 		defs.push({ name: m[1], strings });

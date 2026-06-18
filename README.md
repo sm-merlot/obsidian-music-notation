@@ -22,7 +22,7 @@ tab reflows to screen width.
 mode: tab
 meter: 4/4
 unit: 1/32
-tuning: e B G D A E
+tuning: E A D G B e
 
 H: D                               G
 L:  Ka-tie  don't   cry
@@ -54,9 +54,9 @@ above its word**, so it stays aligned at any width — and chord symbols get nic
 and superscript extensions. Chord-only lines (intros) and `[Section]` labels work too.
 
 **Chord diagrams** (both modes): add `chord NAME …` lines in the header and a strip of
-fretboard diagrams renders at the top. Frets are high-e→low-E (matching `tuning:`),
-`x` = muted, `0` = open — e.g. `chord D = 2 3 2 0 x x`, `chord Em = 0 0 0 2 2 0`, or
-compact `chord C = 010 23x`/`chord C = x32010`.
+fretboard diagrams renders at the top. Frets are low-E→high-e (matching `tuning:`),
+`x` = muted, `0` = open — e.g. `chord D = x x 0 2 3 2`, `chord Em = 0 2 2 0 0 0`, or
+compact `chord C = x32010`.
 
 `mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano).
 

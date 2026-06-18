@@ -45,13 +45,14 @@ function tuningCaption(directives: {
 	tuning?: string | null;
 	capo?: string | number | null;
 }): string {
-	const labels = (directives.tuning || "e B G D A E").trim().split(/\s+/);
+	// tuning is written low→high
+	const labels = (directives.tuning || "E A D G B e").trim().split(/\s+/);
 	const eq = (a: string[]) =>
 		a.length === labels.length && a.every((x, i) => x === labels[i]);
 	let name: string;
-	if (eq(["e", "B", "G", "D", "A", "E"])) name = "Standard tuning";
-	else if (eq(["e", "B", "G", "D", "A", "D"])) name = "Drop D";
-	else name = labels.slice().reverse().join(" "); // low → high
+	if (eq(["E", "A", "D", "G", "B", "e"])) name = "Standard tuning";
+	else if (eq(["D", "A", "D", "G", "B", "e"])) name = "Drop D";
+	else name = labels.join(" "); // already low → high
 	// capo is free text, always prefixed "Capo " when set (e.g. "Capo 2",
 	// "Capo none", "Capo 2, orig none"). Omitted only if the directive is absent.
 	const raw = (directives.capo == null ? "" : String(directives.capo)).trim();

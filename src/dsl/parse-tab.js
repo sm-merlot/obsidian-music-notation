@@ -160,9 +160,10 @@ export function parseTab(src) {
 	// tuning: "e B G D A E" top->bottom. Map each label to a midi using octave
 	// heuristics from DEFAULT_OPEN by letter (case-sensitive e vs E distinguishes
 	// high vs low E); drop-D etc come from changing a label.
-	// Full tuning, top→bottom (default standard). String NUMBER comes from a
+	// Tuning is written low→high (e.g. "E A D G B e"); reverse to high→low for
+	// internal use (string 1 = top line = high e). String NUMBER comes from a
 	// label's position here — so rows can be omitted without shifting the rest.
-	const tuningLabels = (dir.tuning || "e B G D A E").trim().split(/\s+/);
+	const tuningLabels = (dir.tuning || "E A D G B e").trim().split(/\s+/).reverse();
 
 	const systems = [];
 	let curSection = null;
