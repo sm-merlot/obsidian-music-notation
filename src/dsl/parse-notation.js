@@ -154,7 +154,8 @@ export function parseNotation(src) {
 function resolveStaff(sys, dir, clefType) {
 	clefType = normClef(clefType);
 	const rows = sys.rows;
-	const width = Math.max(0, ...rows.map((r) => r.length));
+	// trailing whitespace is ignored entirely — width is the last real content column
+	const width = Math.max(0, ...rows.map((r) => r.replace(/\s+$/, "").length));
 	// A column that is all-space across the staff rows is PADDING — visual spacing
 	// (like tab's space) that does NOT advance time. Map char-column -> time-column
 	// so durations/rests count only non-padding columns.
