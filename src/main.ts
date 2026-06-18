@@ -38,6 +38,19 @@ function detectFormat(source: string): InputFormat {
 	return "musicxml";
 }
 
+/** Human caption for a tab's tuning + capo, e.g. "Standard tuning · Capo 2". */
+function tuningCaption(directives: { tuning?: string; capo?: number }): string {
+	const labels = (directives.tuning || "e B G D A E").trim().split(/\s+/);
+	const eq = (a: string[]) =>
+		a.length === labels.length && a.every((x, i) => x === labels[i]);
+	let name: string;
+	if (eq(["e", "B", "G", "D", "A", "E"])) name = "Standard tuning";
+	else if (eq(["e", "B", "G", "D", "A", "D"])) name = "Drop D";
+	else name = labels.slice().reverse().join(" "); // low → high
+	const capo = Number(directives.capo) || 0;
+	return name + (capo > 0 ? ` · Capo ${capo}` : "");
+}
+
 /** DSL mode from an explicit `mode:` directive, else inferred from the body. */
 function dslMode(source: string): "tab" | "chords" | "notation" {
 	const m = source.match(/^\s*mode\s*:\s*(tab|chords|notation)\s*$/im);
@@ -128,7 +141,11 @@ export default class MusicNotationPlugin extends Plugin {
 				if (dsl && dslMode(source) === "tab") {
 					// Render each section as its own SVG so it starts on a new
 					// line and wraps independently. Labels are themed headings.
-					const { sections } = tabSrcToSections(source);
+					const { directives, sections } = tabSrcToSections(source);
+					target.createDiv({
+						cls: "music-notation-tuning",
+						text: tuningCaption(directives),
+					});
 					for (const sec of sections) {
 						if (sec.label) {
 							target.createDiv({

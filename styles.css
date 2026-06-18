@@ -52,6 +52,12 @@
 	font-variant-numeric: tabular-nums;
 }
 
+.music-notation-tuning {
+	font-size: var(--font-smaller);
+	color: var(--text-muted);
+	margin-bottom: 6px;
+}
+
 .music-notation-section {
 	font-weight: 600;
 	color: var(--text-normal);
