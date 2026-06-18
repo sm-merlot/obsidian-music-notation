@@ -250,6 +250,14 @@ export default class MusicNotationPlugin extends Plugin {
 		return svgEl;
 	}
 
+	/** A chord name rendered with ♯/♭ glyphs and a superscript extension. */
+	private chordNameEl(parent: HTMLElement, name: string) {
+		const { root, ext } = chordParts(name);
+		const cs = parent.createSpan({ cls: "cl-chord-name" });
+		cs.createSpan({ cls: "cl-root", text: root });
+		if (ext) cs.createEl("sup", { cls: "cl-ext", text: ext });
+	}
+
 	/**
 	 * Render a strip of chord-diagram boxes from `chord NAME …` definitions.
 	 * Shared by tab and chords modes; drawn as small self-contained SVGs.
@@ -261,7 +269,7 @@ export default class MusicNotationPlugin extends Plugin {
 		const strip = target.createDiv({ cls: "music-notation-chordbox" });
 		for (const d of defs) {
 			const cell = strip.createDiv({ cls: "cb-cell" });
-			cell.createDiv({ cls: "cb-name", text: d.name });
+			this.chordNameEl(cell.createDiv({ cls: "cb-name" }), d.name);
 			const { base, dots, markers } = chordLayout(d.strings);
 			const xs = (s: number) => 18 + s * 18; // 6 strings, low E (s=0) left
 			const nutY = 24;
@@ -284,7 +292,7 @@ export default class MusicNotationPlugin extends Plugin {
 			for (let f = 0; f <= 4; f++)
 				el("line", { x1: xs(0), y1: fretY(f), x2: xs(5), y2: fretY(f), stroke: "currentColor", "stroke-width": f === 0 && base === 1 ? 6 : 2 });
 			if (base > 1)
-				el("text", { x: xs(5) + 10, y: fretY(1) + 2, "font-size": 20, fill: "currentColor" }).textContent = `${base}`;
+				el("text", { x: xs(5) + 10, y: nutY + dy / 2, "font-size": 20, "dominant-baseline": "central", fill: "currentColor" }).textContent = `${base}`;
 			// fingered dots
 			for (const dot of dots)
 				el("circle", { cx: xs(dot.string), cy: nutY + (dot.fret - 0.5) * dy, r: 7, fill: "currentColor" });
@@ -316,13 +324,8 @@ export default class MusicNotationPlugin extends Plugin {
 				text: `Capo ${directives.capo}`,
 			});
 		}
-		// one chord name → root span + superscript extension
-		const chordName = (parent: HTMLElement, name: string) => {
-			const { root, ext } = chordParts(name);
-			const cs = parent.createSpan({ cls: "cl-chord-name" });
-			cs.createSpan({ cls: "cl-root", text: root });
-			if (ext) cs.createEl("sup", { cls: "cl-ext", text: ext });
-		};
+		const chordName = (parent: HTMLElement, name: string) =>
+			this.chordNameEl(parent, name);
 		// chord stack above a word (one or more chords)
 		const chordsAbove = (word: HTMLElement, names: string[]) => {
 			const c = word.createSpan({ cls: "cl-chord" });
