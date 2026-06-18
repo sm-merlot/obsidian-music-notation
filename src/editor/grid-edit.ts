@@ -8,6 +8,7 @@
 // All scoped to ```music blocks only; `music-verovio` (raw XML/ABC) is left alone.
 import { EditorState, Prec, Text, Extension } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
+import { gridStart, fillChar } from "./grid-ops";
 
 /** Inner line ranges (1-based, inclusive) of every ```music fenced block. */
 function musicBlocks(doc: Text): Array<{ start: number; end: number }> {
@@ -39,27 +40,6 @@ function musicBlocks(doc: Text): Array<{ start: number; end: number }> {
 function lineInMusic(state: EditorState, pos: number): boolean {
 	const n = state.doc.lineAt(pos).number;
 	return musicBlocks(state.doc).some((b) => n >= b.start && n <= b.end);
-}
-
-const DIRECTIVE = /^\s*(mode|meter|unit|tuning|capo|title|transpose|clef|key)\s*:/i;
-// content chars that make up an ASCII grid row (tab + notation)
-const GRID = /^[\s\-|()0-9xX#bn_^hps]*$/;
-const GRID_TOKEN = /[-|0-9xX#bn]/;
-
-/**
- * If `text` is a grid row, return the column where grid content begins (after an
- * optional string/pitch label like `e:` / `F#:`); otherwise -1. Directive lines,
- * `H:`/`L:` rows, `[Section]` labels and prose are not grid rows.
- */
-function gridStart(text: string): number {
-	if (DIRECTIVE.test(text)) return -1;
-	if (/^\s*[HhLl]\s*:/.test(text)) return -1;
-	if (/^\s*\[.*\]\s*$/.test(text)) return -1;
-	const lab = text.match(/^(\s*[A-Ga-g][#b]?\s*:\s?)(.*)$/);
-	const start = lab ? lab[1].length : 0;
-	const content = text.slice(start);
-	if (content === "" || !GRID.test(content) || !GRID_TOKEN.test(content)) return -1;
-	return start;
 }
 
 // Rewrite plain single-cursor typing inside a grid row: drop "." (-> space) and
@@ -141,13 +121,16 @@ const gridKeys = Prec.highest(
 				if (start < 0) return false;
 				const col = pos - line.from;
 				if (col <= start || pos >= line.to) return false; // label/start or EOL -> normal
+				// restore the row's own fill: `-` on string/staff rows, space on
+				// notation note rows (so deleting a note clears to blank, not a dash)
+				const fill = fillChar(line.text);
 				const prev = state.doc.sliceString(pos - 1, pos);
-				if (prev === "-") {
+				if (prev === fill) {
 					view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));
 				} else {
 					view.dispatch(
 						state.update({
-							changes: { from: pos - 1, to: pos, insert: "-" },
+							changes: { from: pos - 1, to: pos, insert: fill },
 							selection: { anchor: pos - 1 },
 							scrollIntoView: true,
 							userEvent: "delete.backward",
