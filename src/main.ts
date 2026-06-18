@@ -39,7 +39,7 @@ function detectFormat(source: string): InputFormat {
 }
 
 /** Human caption for a tab's tuning + capo, e.g. "Standard tuning · Capo 2". */
-function tuningCaption(directives: { tuning?: string; capo?: number }): string {
+function tuningCaption(directives: { tuning?: string | null; capo?: number }): string {
 	const labels = (directives.tuning || "e B G D A E").trim().split(/\s+/);
 	const eq = (a: string[]) =>
 		a.length === labels.length && a.every((x, i) => x === labels[i]);
