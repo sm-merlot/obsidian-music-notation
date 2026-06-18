@@ -31,7 +31,22 @@ export function notationToMusicXML(model) {
 		const roles = beamRoles(bar.events, 1 / d.beatType);
 		let body = "";
 		bar.events.forEach((e, ei) => {
-			const { type, dots, div } = durParts(e.durFrac);
+			const dp = durParts(e.durFrac);
+			const div = dp.div; // played duration (already scaled for the tuplet)
+			let type = dp.type;
+			let dots = dp.dots;
+			// A tuplet member is NOTATED as a straight note (played × actual/normal),
+			// plus a time-modification and a bracket on the first/last member.
+			let timeMod = "";
+			let tupletNot = "";
+			if (e.tuplet) {
+				const b = durParts((e.durFrac * e.tuplet.actual) / e.tuplet.normal);
+				type = b.type;
+				dots = b.dots;
+				timeMod = `<time-modification><actual-notes>${e.tuplet.actual}</actual-notes><normal-notes>${e.tuplet.normal}</normal-notes></time-modification>`;
+				if (e.tuplet.pos !== "mid")
+					tupletNot = `<notations><tuplet type="${e.tuplet.pos}" bracket="yes"/></notations>`;
+			}
 			if (e.rest || !e.notes.length) {
 				body += `<note><rest/><duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}</note>`;
 				return;
@@ -48,8 +63,8 @@ export function notationToMusicXML(model) {
 				body +=
 					`<note>${i > 0 ? "<chord/>" : ""}` +
 					`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
-					`<duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}` +
-					`${i === 0 ? beam : ""}${i === 0 ? lyric : ""}</note>`;
+					`<duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}${timeMod}` +
+					`${i === 0 ? beam : ""}${i === 0 ? tupletNot : ""}${i === 0 ? lyric : ""}</note>`;
 			});
 		});
 		return `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${body}</measure>`;

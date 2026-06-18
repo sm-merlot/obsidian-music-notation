@@ -3,7 +3,7 @@
 // the SVG afterwards; pitches are irrelevant, fixed to B4). Staff 2 is the TAB
 // staff with explicit string/fret. Both voices share the event rhythm.
 
-export const DIV = 8; // divisions per quarter -> 32nd = 1
+export const DIV = 24; // divisions per quarter (mult. of 3 so triplets are integral)
 export const esc = (s) =>
 	String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 

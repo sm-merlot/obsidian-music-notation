@@ -87,6 +87,27 @@ x   |
 ````
 (a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
 
+**Triplets / tuplets** — bracket a group with `n( … )` (bare `(` = a triplet). The
+parens mark a **column span**, and every note whose column falls inside — on any row —
+joins the tuplet, so a melodic triplet across three pitches works. The group is squeezed
+into its normal beat (3 in the time of 2), and the spacing inside sets each note's
+relative length: `3(x--x--x--)` is an even triplet, `3(x-x--x)` is long-short. For a
+melody, draw the bracket on its own line above the staff:
+
+````markdown
+```music
+mode: notation
+unit: 1/8
+
+3(          )
+        x
+     x
+  x
+----------------
+```
+````
+(three different pitches under one bracket = an eighth-note triplet.)
+
 **Transpose (per sheet)** — add `transpose:` to the header of a `chords` or `notation`
 block and it shifts everything: write the chart in concert pitch, set `transpose: Bb`
 and a trumpet player reads it in their key. Value is an **instrument** (`Bb`, `Eb`,
