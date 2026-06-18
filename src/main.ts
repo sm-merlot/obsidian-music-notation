@@ -50,10 +50,15 @@ function tuningCaption(directives: {
 	if (eq(["e", "B", "G", "D", "A", "E"])) name = "Standard tuning";
 	else if (eq(["e", "B", "G", "D", "A", "D"])) name = "Drop D";
 	else name = labels.slice().reverse().join(" "); // low → high
-	// capo is free text: bare number -> "Capo N"; none/0/empty -> omit; else verbatim.
+	// capo is free text. Shown whenever set: bare number -> "Capo N";
+	// none/no/0 -> "No capo"; anything else verbatim. Omitted only if absent.
 	const raw = (directives.capo == null ? "" : String(directives.capo)).trim();
 	let capo = "";
-	if (raw && !/^(none|no|0)$/i.test(raw)) capo = /^\d+$/.test(raw) ? `Capo ${raw}` : raw;
+	if (raw) {
+		if (/^(none|no|0)$/i.test(raw)) capo = "No capo";
+		else if (/^\d+$/.test(raw)) capo = `Capo ${raw}`;
+		else capo = raw;
+	}
 	return name + (capo ? ` · ${capo}` : "");
 }
 
