@@ -94,6 +94,10 @@ and a trumpet player reads it in their key. Value is an **instrument** (`Bb`, `E
 the staff pitches and chord symbols both move; in `chords` the chord names move.
 (Chord *diagrams* and `tab` grids are not transposed — their frets are literal.)
 
+A **Transpose dropdown** also sits above every chords/notation sheet — pick a key
+there to re-render the view on the fly (it starts at the block's `transpose:` and
+doesn't change the note).
+
 ### `music-verovio` — raw escape hatch
 
 Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is
