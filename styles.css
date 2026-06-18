@@ -58,26 +58,24 @@
 	margin-bottom: 6px;
 }
 
-/* Chord-over-lyric mode: words wrap, chords stay glued above their word. */
+/* Chord-over-lyric mode: each word is a small box (chord lane on top, text
+ * below) so words wrap word-by-word and every wrapped row keeps chord room. */
 .cl-line {
-	padding-top: 1.4em;
-	line-height: 1.75;
-	margin: 0.1em 0;
+	line-height: 1.3;
+	margin: 0.15em 0;
 }
 .cl-word {
-	position: relative;
 	display: inline-block;
-	margin-right: 0.28em;
-	white-space: pre;
+	vertical-align: bottom;
+	margin-right: 0.3em;
 }
 .cl-chord {
-	position: absolute;
-	bottom: 100%;
-	left: 0;
+	display: block;
+	height: 1.25em;
+	line-height: 1.25;
 	white-space: nowrap;
 	font-weight: 600;
 	font-size: 0.85em;
-	line-height: 1.1;
 	color: var(--text-accent);
 }
 .cl-chord-name {
@@ -86,14 +84,17 @@
 .cl-ext {
 	font-size: 0.72em;
 }
-.cl-chordline .cl-chord,
-.cl-lead .cl-chord {
-	position: static;
-	display: inline-block;
-	margin-right: 0.6em;
+.cl-text {
+	display: block;
+	white-space: pre;
 }
 .cl-gap {
 	height: 0.55em;
+}
+
+/* Tab mode: colour the engraved chord symbols (Verovio harmony) with the accent. */
+.music-notation svg .harm {
+	fill: var(--text-accent);
 }
 
 .music-notation-section {

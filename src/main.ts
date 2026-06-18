@@ -298,7 +298,7 @@ export default class MusicNotationPlugin extends Plugin {
 				}
 				for (const wd of b.words) {
 					const w = line.createSpan({ cls: "cl-word" });
-					if (wd.chords.length) chordsAbove(w, wd.chords);
+					chordsAbove(w, wd.chords); // always reserve the chord lane
 					w.createSpan({ cls: "cl-text", text: wd.text });
 				}
 			}
