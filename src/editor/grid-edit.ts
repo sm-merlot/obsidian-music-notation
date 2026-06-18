@@ -111,9 +111,9 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 	};
 });
 
-// Enter inside a music block = a bare newline (no auto-indent, no list continue).
-const plainEnter = Prec.highest(
+const gridKeys = Prec.highest(
 	keymap.of([
+		// Enter inside a music block = a bare newline (no auto-indent / list continue).
 		{
 			key: "Enter",
 			run: (view) => {
@@ -125,9 +125,41 @@ const plainEnter = Prec.highest(
 				return true;
 			},
 		},
+		// Backspace mirrors overtype: inside a grid row, turn the char to the left
+		// into `-` and step left (so columns stay aligned). At the very end of the
+		// row, or in the label, fall back to a normal delete.
+		{
+			key: "Backspace",
+			run: (view) => {
+				const { state } = view;
+				const sel = state.selection.main;
+				if (state.selection.ranges.length !== 1 || !sel.empty) return false;
+				const pos = sel.head;
+				if (!lineInMusic(state, pos)) return false;
+				const line = state.doc.lineAt(pos);
+				const start = gridStart(line.text);
+				if (start < 0) return false;
+				const col = pos - line.from;
+				if (col <= start || pos >= line.to) return false; // label/start or EOL -> normal
+				const prev = state.doc.sliceString(pos - 1, pos);
+				if (prev === "-") {
+					view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));
+				} else {
+					view.dispatch(
+						state.update({
+							changes: { from: pos - 1, to: pos, insert: "-" },
+							selection: { anchor: pos - 1 },
+							scrollIntoView: true,
+							userEvent: "delete.backward",
+						})
+					);
+				}
+				return true;
+			},
+		},
 	])
 );
 
 export function musicGridExtension(): Extension {
-	return [gridInput, plainEnter];
+	return [gridInput, gridKeys];
 }
