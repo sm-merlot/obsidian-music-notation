@@ -151,16 +151,41 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	const rows = systemGridRows(lines, b, cur);
 	if (!rows.length) return null;
 	const d = directives(lines, b);
-	const w = unitsPerBar(d);
 	const inner = lines.slice(b.start, b.end + 1);
-	const maxLen = Math.max(...rows.map((r) => lines[r].length));
+	const R = Math.max(...rows.map((r) => lines[r].length)); // current right edge
+	// bar width = an existing bar's width (so it matches), else from meter/unit
+	let w = 0;
+	for (const r of rows) if (lines[r].includes("|")) w = Math.max(w, lastBarWidth(lines[r]));
+	if (!w) w = unitsPerBar(d);
 	const cursorLine = rows.includes(cur) ? cur : rows[0];
+	let cursorCh = R;
 	for (const r of rows) {
 		const i = r - b.start;
-		const padded = inner[i] + fillChar(lines[r]).repeat(maxLen - lines[r].length);
-		inner[i] = padded + "|" + fillChar(lines[r]).repeat(w);
+		const f = fillChar(lines[r]);
+		const padded = lines[r] + f.repeat(Math.max(0, R - lines[r].length));
+		if (padded.endsWith("|")) inner[i] = padded + f.repeat(w) + "|"; // closing-bar style: ...| -> ...|----|
+		else if (padded.includes("|")) inner[i] = padded + "|" + f.repeat(w); // open style: ...- -> ...-|----
+		else inner[i] = padded + f.repeat(w + 1); // ledger/accidental row: just keep aligned, no stray |
+		if (r === cursorLine) cursorCh = padded.endsWith("|") ? R : R + 1;
 	}
-	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cursorLine, ch: maxLen + 1 } };
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cursorLine, ch: cursorCh } };
+}
+
+/** Width of the last (rightmost non-empty) bar on a barred grid row. */
+function lastBarWidth(text: string): number {
+	const s = gridStart(text);
+	if (s < 0) return 0;
+	const bars = text.slice(s).split("|");
+	for (let k = bars.length - 1; k >= 0; k--) if (bars[k].length > 0) return bars[k].length;
+	return 0;
+}
+
+/** One-command entry: blank line -> new stave; on a grid row -> add a bar. */
+export function addBarOrSystem(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
+	if (!b) return null;
+	if ((lines[pos.line] || "").trim() === "") return addSystem(lines, pos);
+	return addBar(lines, pos);
 }
 
 /** Add a new blank system (stave) below the current one. Tab only (derives the
@@ -169,21 +194,28 @@ export function addSystem(lines: string[], pos: Pos): Edit | null {
 	const cur = pos.line;
 	const b = blockAt(lines, cur);
 	if (!b) return null;
-	const d = directives(lines, b);
-	const isTab = d.mode === "tab" || (d.mode === null && systemGridRows(lines, b, cur).some((r) => /^\s*[A-Ga-g][#b]?\s*:/.test(lines[r])));
-	if (!isTab) return null;
-	const w = unitsPerBar(d);
 	const rows = systemGridRows(lines, b, cur);
-	const insertAfter = rows.length ? Math.max(...rows) : b.end; // doc line
-	const labels = [...d.tuning].reverse(); // tuning is low→high; tab rows are high→low
-	const stave = labels.map((l) => `${l}:  ` + "-".repeat(w));
-	const block = ["", ...stave];
+	if (!rows.length) return null;
+	// clone the current system's shape, emptied: keep labels + `|` + the staff
+	// lines, blank the notes. Works for tab and notation.
+	const insertAfter = Math.max(...rows);
+	const clone = rows.map((r) => blankRow(lines[r]));
+	const block = ["", ...clone];
 	const inner = lines.slice(b.start, b.end + 1);
 	const at = insertAfter - b.start + 1;
 	inner.splice(at, 0, ...block);
-	// cursor at start of the new top stave row's content
-	const topRowDocLine = b.start + at + 1; // +1 to skip the blank line
-	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topRowDocLine, ch: 4 } };
+	const topDoc = b.start + at + 1; // skip the blank line
+	const s = gridStart(clone[0]);
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topDoc, ch: s >= 0 ? s : 0 } };
+}
+
+/** Empty a grid row: keep its label and barlines, replace notes with the fill. */
+function blankRow(text: string): string {
+	const s = gridStart(text);
+	const label = s >= 0 ? text.slice(0, s) : "";
+	const f = fillChar(text);
+	const content = (s >= 0 ? text.slice(s) : text).replace(/[^|]/g, f);
+	return label + content;
 }
 
 /** Align every system in the block: pad each row's bars to the per-column max so

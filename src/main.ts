@@ -16,7 +16,7 @@ import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
-import { addBar, addSystem, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
+import { addBarOrSystem, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -154,13 +154,8 @@ export default class MusicNotationPlugin extends Plugin {
 		};
 		this.addCommand({
 			id: "music-add-bar",
-			name: "Add bar to current system",
-			editorCallback: (editor) => apply(editor, addBar, "Place the cursor in a music grid system first"),
-		});
-		this.addCommand({
-			id: "music-add-system",
-			name: "Add bar on a new line (new stave)",
-			editorCallback: (editor) => apply(editor, addSystem, "Add system works in a tab music block"),
+			name: "Add bar (or new stave on a blank line)",
+			editorCallback: (editor) => apply(editor, addBarOrSystem, "Place the cursor in a music block first"),
 		});
 		this.addCommand({
 			id: "music-remove-bar",
