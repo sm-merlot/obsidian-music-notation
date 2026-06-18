@@ -125,7 +125,9 @@ const gridKeys = Prec.highest(
 				// notation note rows (so deleting a note clears to blank, not a dash)
 				const fill = fillChar(line.text);
 				const prev = state.doc.sliceString(pos - 1, pos);
-				if (prev === fill) {
+				// already fill, or a barline -> just step left (keep `|` so holding
+				// backspace clears a row without eating its barlines)
+				if (prev === fill || prev === "|") {
 					view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));
 				} else {
 					view.dispatch(
