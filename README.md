@@ -53,6 +53,11 @@ fret twelve then three; `312)` = fret three then twelve.
 above its word**, so it stays aligned at any width — and chord symbols get nice ♯/♭
 and superscript extensions. Chord-only lines (intros) and `[Section]` labels work too.
 
+**Chord diagrams** (both modes): add `chord NAME …` lines in the header and a strip of
+fretboard diagrams renders at the top. Frets are high-e→low-E (matching `tuning:`),
+`x` = muted, `0` = open — e.g. `chord D = 2 3 2 0 x x`, `chord Em = 0 0 0 2 2 0`, or
+compact `chord C = 010 23x`/`chord C = x32010`.
+
 `mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano).
 
 ### `music-verovio` — raw escape hatch

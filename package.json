@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-music-notation",
-	"version": "0.2.33",
+	"version": "0.2.34",
 	"description": "Obsidian plugin: staff, guitar tab, chords and lyrics in one sheet via Verovio.",
 	"main": "main.js",
 	"scripts": {

@@ -10,6 +10,7 @@ import createVerovioModule from "verovio/wasm";
 import { VerovioToolkit } from "verovio/esm";
 import { tabSrcToSections, stripNotationStaff } from "./dsl/pipeline.js";
 import { parseChords, chordParts } from "./dsl/chords.js";
+import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -144,6 +145,7 @@ export default class MusicNotationPlugin extends Plugin {
 			try {
 				const px = this.fitWidth(container, el);
 				target.empty();
+				if (dsl) this.drawChordChart(source, target);
 				if (dsl && dslMode(source) === "chords") {
 					this.renderChords(source, target);
 				} else if (dsl && dslMode(source) === "tab") {
@@ -245,6 +247,54 @@ export default class MusicNotationPlugin extends Plugin {
 		}
 		if (strip) stripNotationStaff(svgEl, connections);
 		return svgEl;
+	}
+
+	/**
+	 * Render a strip of chord-diagram boxes from `chord NAME …` definitions.
+	 * Shared by tab and chords modes; drawn as small self-contained SVGs.
+	 */
+	private drawChordChart(source: string, target: HTMLElement) {
+		const defs = parseChordDefs(source);
+		if (!defs.length) return;
+		const NS = "http://www.w3.org/2000/svg";
+		const strip = target.createDiv({ cls: "music-notation-chordbox" });
+		for (const d of defs) {
+			const cell = strip.createDiv({ cls: "cb-cell" });
+			cell.createDiv({ cls: "cb-name", text: d.name });
+			const { base, dots, markers } = chordLayout(d.strings);
+			const xs = (s: number) => 18 + s * 18; // 6 strings, low E (s=0) left
+			const nutY = 24;
+			const dy = 24;
+			const fretY = (f: number) => nutY + f * dy; // 4 fret rows
+			const svg = document.createElementNS(NS, "svg");
+			svg.setAttribute("viewBox", "0 0 120 132");
+			svg.setAttribute("class", "cb-svg");
+			const el = (tag: string, attrs: Record<string, string | number>) => {
+				const e = document.createElementNS(NS, tag);
+				for (const k in attrs) e.setAttribute(k, String(attrs[k]));
+				svg.appendChild(e);
+				return e;
+			};
+			// 6 strings (vertical)
+			for (let s = 0; s < 6; s++)
+				el("line", { x1: xs(s), y1: nutY, x2: xs(s), y2: fretY(4), stroke: "currentColor", "stroke-width": 2 });
+			// 5 fret lines (horizontal); nut thick when at the top of the neck
+			for (let f = 0; f <= 4; f++)
+				el("line", { x1: xs(0), y1: fretY(f), x2: xs(5), y2: fretY(f), stroke: "currentColor", "stroke-width": f === 0 && base === 1 ? 6 : 2 });
+			if (base > 1)
+				el("text", { x: xs(5) + 9, y: fretY(1) - 6, "font-size": 16, fill: "currentColor" }).textContent = `${base}fr`;
+			// fingered dots
+			for (const dot of dots)
+				el("circle", { cx: xs(dot.string), cy: nutY + (dot.fret - 0.5) * dy, r: 7, fill: "currentColor" });
+			// open / muted markers above the nut
+			for (const mk of markers) {
+				if (mk.type === "o")
+					el("circle", { cx: xs(mk.string), cy: 12, r: 5, fill: "none", stroke: "currentColor", "stroke-width": 2 });
+				else
+					el("text", { x: xs(mk.string), y: 17, "font-size": 16, "text-anchor": "middle", fill: "currentColor" }).textContent = "×";
+			}
+			cell.appendChild(svg);
+		}
 	}
 
 	/**
