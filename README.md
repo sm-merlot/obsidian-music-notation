@@ -132,6 +132,27 @@ A **Transpose dropdown** also sits above every chords/notation sheet — pick a 
 there to re-render the view on the fly (it starts at the block's `transpose:` and
 doesn't change the note).
 
+**Multi-staff (piano, SATB, etc.)** — `clef:` takes a list, one entry per staff
+top→bottom: `treble`, `bass`, `treble-8ve` (sounds 8vb), `tenor`, `grand`. A **double
+blank line** separates independent staves (they're bracketed and share barlines); a
+**`===` line** continues the same set of staves on a new source line (the chunks are
+concatenated per part — Verovio still reflows to width). `grand` is a braced piano
+grand staff: draw the treble cluster, the natural staff gap, then the bass cluster, and
+the two halves brace into one part.
+
+````markdown
+```music
+mode: notation
+clef: treble bass
+
+|x-------|--------     ← part 1 (treble)
+|--------|--------
+
+|--------|--------     ← part 2 (bass), separated by a double blank
+|x-------|x-------
+```
+````
+
 ### `music-verovio` — raw escape hatch
 
 Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is

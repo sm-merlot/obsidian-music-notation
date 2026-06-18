@@ -21,8 +21,23 @@ function stepBy(p, n) {
 	return q;
 }
 
-// bottom staff line per clef
-const BOTTOM_LINE = { treble: { letter: "E", octave: 4 }, bass: { letter: "G", octave: 2 } };
+// bottom staff line per clef type (the pitch of the lowest drawn line). `grand`
+// is a continuous ladder anchored at the bass bottom line (G2), spanning up
+// through middle C into the treble; its notes are split to two staves at C4.
+const CLEFS = {
+	treble: { bottom: { letter: "E", octave: 4 } },
+	bass: { bottom: { letter: "G", octave: 2 } },
+	"treble-8ve": { bottom: { letter: "E", octave: 3 } },
+	tenor: { bottom: { letter: "D", octave: 3 } },
+	alto: { bottom: { letter: "F", octave: 3 } },
+	grand: { bottom: { letter: "G", octave: 2 } },
+};
+const BOTTOM_LINE = CLEFS; // legacy alias
+function normClef(t) {
+	const s = String(t || "treble").trim().toLowerCase();
+	if (["treble-8", "treble8", "treble-8ve", "8vb", "octave-treble"].includes(s)) return "treble-8ve";
+	return CLEFS[s] ? s : "treble";
+}
 
 // tuplet ratio: n notes play in the time of the largest power of two below n
 // (3:2 triplet, 5:4 quintuplet, 6:4, 7:4 ...).
@@ -48,6 +63,35 @@ function syllablesFor(t) {
 	return out;
 }
 
+// Split a run of body lines into stacked staves (double-blank separated; a single
+// blank is an interior pitch step). Returns [{rows, lyric, lyricAbs, chordRow,
+// chordRowAbs}], one per staff, top→bottom.
+function splitStaves(body) {
+	const staves = [];
+	const mk = () => ({ rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null });
+	let cur = mk();
+	const push = () => {
+		while (cur.rows.length && cur.rows[0].trim() === "") cur.rows.shift();
+		while (cur.rows.length && cur.rows[cur.rows.length - 1].trim() === "") cur.rows.pop();
+		if (cur.rows.length) staves.push(cur);
+		cur = mk();
+	};
+	const blankLabel = (s) => s.replace(/^(\s*[A-Za-z]+\s*:\s?)/, (m) => " ".repeat(m.length));
+	let blanks = 0;
+	for (const l of body) {
+		if (l.trim() === "") { blanks++; continue; }
+		if (blanks >= 2) push();
+		else for (let k = 0; k < blanks; k++) cur.rows.push("");
+		blanks = 0;
+		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);
+		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; cur.lyricAbs = blankLabel(l); continue; }
+		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; cur.chordRowAbs = blankLabel(l); continue; }
+		cur.rows.push(l);
+	}
+	push();
+	return staves;
+}
+
 export function parseNotation(src) {
 	const lines = src.replace(/\r/g, "").split("\n");
 	const d = { mode: "notation", clef: "treble", key: "C", meter: "4/4", unit: "1/8", transpose: "" };
@@ -63,46 +107,52 @@ export function parseNotation(src) {
 	const fifths = FIFTHS[d.key] ?? 0;
 	const directives = { ...d, beats, beatType, unitFrac: un / ud, fifths };
 
-	// split body into systems by [Section]; each system = staff rows + H:/L:
-	const systems = [];
-	let cur = { section: null, rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null };
-	const pushCur = () => {
-		// trim leading/trailing all-blank rows (padding, not pitches)
-		while (cur.rows.length && cur.rows[0].trim() === "") cur.rows.shift();
-		while (cur.rows.length && cur.rows[cur.rows.length - 1].trim() === "") cur.rows.pop();
-		if (cur.rows.length) systems.push(cur);
-		cur = { section: null, rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null };
-	};
-	let blanks = 0;
-	for (const l of body) {
-		if (l.trim() === "") { blanks++; continue; }
-		// A run of 2+ blank rows separates staves; a single blank is an interior
-		// pitch step (it sets vertical distance), so keep it in the current system.
-		if (blanks >= 2) pushCur();
-		else for (let k = 0; k < blanks; k++) cur.rows.push("");
-		blanks = 0;
-		const sec = l.match(/^\s*\[(.+?)\]\s*$/);
-		if (sec) { pushCur(); cur.section = sec[1]; continue; }
-		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);
-		// Store both forms of H:/L: rows: `*` = label stripped (relative: content
-		// col 0 = beat 1) and `*Abs` = label blanked (absolute columns). With an
-		// opening barline the staff and H:/L: share a margin, so absolute columns
-		// line up visually; without one we fall back to the relative form.
-		const blankLabel = (s) => s.replace(/^(\s*[A-Za-z]+\s*:\s?)/, (m) => " ".repeat(m.length));
-		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; cur.lyricAbs = blankLabel(l); continue; }
-		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; cur.chordRowAbs = blankLabel(l); continue; }
-		cur.rows.push(l);
-	}
-	pushCur();
+	// `clef:` lists the staves top→bottom (e.g. "treble bass", "grand", "treble treble tenor bass")
+	const clefs = String(d.clef).trim().split(/[\s,]+/).filter(Boolean).map(normClef);
+	if (!clefs.length) clefs.push("treble");
 
-	const out = { directives, systems: [] };
-	for (const sys of systems) {
-		out.systems.push(resolveSystem(sys, directives));
+	// `===` lines continue the set of staves on a new source line; chunks are
+	// concatenated per part. Within a chunk, staves stack (double-blank separated).
+	const chunks = [[]];
+	for (const l of body) {
+		if (/^\s*=+\s*$/.test(l)) chunks.push([]);
+		else chunks[chunks.length - 1].push(l);
 	}
-	return out;
+	const chunkStaves = chunks.map(splitStaves).filter((cs) => cs.length);
+
+	// Map each chunk's clusters to parts using the clef list. A `grand` consumes
+	// TWO clusters (treble half + bass half, separated by the natural staff gap)
+	// and braces them into one 2-staff part; every other clef takes one cluster.
+	const parts = [];
+	const addFrag = (j, frag) => {
+		if (!parts[j]) { parts[j] = frag; return; }
+		if (frag.clefType === "grand") {
+			parts[j].trebleBars = parts[j].trebleBars.concat(frag.trebleBars);
+			parts[j].bassBars = parts[j].bassBars.concat(frag.bassBars);
+		} else {
+			parts[j].bars = parts[j].bars.concat(frag.bars);
+		}
+	};
+	for (const clusters of chunkStaves) {
+		let ci = 0;
+		for (let j = 0; j < clefs.length && ci < clusters.length; j++) {
+			const clef = clefs[j];
+			if (clef === "grand") {
+				const treble = resolveStaff(clusters[ci++], directives, "treble").bars;
+				const bass = ci < clusters.length ? resolveStaff(clusters[ci++], directives, "bass").bars : [];
+				addFrag(j, { clefType: "grand", trebleBars: treble, bassBars: bass });
+			} else {
+				addFrag(j, { clefType: clef, bars: resolveStaff(clusters[ci++], directives, clef).bars });
+			}
+		}
+	}
+	if (!parts.length) parts.push({ clefType: "treble", bars: [] });
+	// `systems` kept for back-compat (single-staff callers / tests)
+	return { directives, parts, systems: parts.map((p) => ({ bars: p.bars || p.trebleBars || [] })) };
 }
 
-function resolveSystem(sys, dir) {
+function resolveStaff(sys, dir, clefType) {
+	clefType = normClef(clefType);
 	const rows = sys.rows;
 	const width = Math.max(0, ...rows.map((r) => r.length));
 	// A STAFF line spans (most of) the width; a short dash is a ledger line
@@ -113,7 +163,7 @@ function resolveSystem(sys, dir) {
 	rows.forEach((r, i) => { if (isStaffLine(r)) bottomLineIdx = i; });
 	if (bottomLineIdx === -1) rows.forEach((r, i) => { if (r.includes("-")) bottomLineIdx = i; });
 	if (bottomLineIdx === -1) bottomLineIdx = rows.length - 1;
-	const base = BOTTOM_LINE[dir.clef] || BOTTOM_LINE.treble;
+	const base = (CLEFS[clefType] || CLEFS.treble).bottom;
 	const pitchOfRow = (i) => stepBy(base, bottomLineIdx - i); // rows above = higher
 
 	// onsets per row: {col, span, alterOverride|null}
@@ -242,5 +292,5 @@ function resolveSystem(sys, dir) {
 			return { events };
 		});
 
-	return { section: sys.section, bars };
+	return { clefType, bars };
 }
