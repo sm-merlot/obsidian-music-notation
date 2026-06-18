@@ -17,7 +17,7 @@ function tokens(line) {
 
 export function parseChords(src) {
 	const lines = src.replace(/\r/g, "").split("\n");
-	const directives = { capo: "", title: "" };
+	const directives = { capo: "", title: "", transpose: "" };
 	const blocks = [];
 	let pendingChords = null; // tokens from an H: row awaiting its L: row
 
@@ -29,8 +29,8 @@ export function parseChords(src) {
 	};
 
 	for (const raw of lines) {
-		const dir = raw.match(/^\s*(capo|title|mode)\s*:\s*(.+?)\s*$/);
-		if (dir && (dir[1] === "capo" || dir[1] === "title")) {
+		const dir = raw.match(/^\s*(capo|title|mode|transpose)\s*:\s*(.+?)\s*$/);
+		if (dir && dir[1] !== "mode") {
 			directives[dir[1]] = dir[2];
 			continue;
 		}

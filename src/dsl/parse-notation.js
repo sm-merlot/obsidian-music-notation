@@ -41,10 +41,10 @@ function syllablesFor(t) {
 
 export function parseNotation(src) {
 	const lines = src.replace(/\r/g, "").split("\n");
-	const d = { mode: "notation", clef: "treble", key: "C", meter: "4/4", unit: "1/8" };
+	const d = { mode: "notation", clef: "treble", key: "C", meter: "4/4", unit: "1/8", transpose: "" };
 	const body = [];
 	for (const l of lines) {
-		const m = l.match(/^\s*(mode|clef|key|meter|unit|title)\s*:\s*(.+?)\s*$/);
+		const m = l.match(/^\s*(mode|clef|key|meter|unit|title|transpose)\s*:\s*(.+?)\s*$/);
 		if (m) { d[m[1]] = m[2]; continue; }
 		if (/^\s*chord\s+\S/i.test(l)) continue; // chord-diagram defs handled elsewhere
 		body.push(l);

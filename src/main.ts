@@ -61,6 +61,48 @@ function tuningCaption(directives: {
 	return name + (raw ? ` · Capo ${raw}` : "");
 }
 
+// Per-sheet transpose. Value: instrument (Bb/Eb/F), signed semitones, or an
+// interval (M2, P5, -m3). Returns semitones (0 = none).
+function transposeSemis(raw?: string | null): number {
+	const v = (raw || "").trim();
+	if (!v) return 0;
+	const inst: Record<string, number> = { bb: 2, eb: 9, f: 7 };
+	if (inst[v.toLowerCase()] != null) return inst[v.toLowerCase()];
+	if (/^[+-]?\d+$/.test(v)) return parseInt(v, 10);
+	const iv: Record<string, number> = { m2: 1, M2: 2, m3: 3, M3: 4, P4: 5, P5: 7, m6: 8, M6: 9, m7: 10, M7: 11, P8: 12 };
+	const m = v.match(/^(-?)([mMP]\d+)$/);
+	if (m) return (m[1] ? -1 : 1) * (iv[m[2]] || 0);
+	return 0;
+}
+
+const SHARP_PC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const FLAT_PC = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+function rootPc(root: string): number | null {
+	const m = root.match(/^([A-G])([#b]?)/);
+	if (!m) return null;
+	const base = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1] as "C"];
+	return (base + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + 120) % 12;
+}
+/** Transpose a chord symbol's root (and slash bass) by `semis`. */
+function transposeChord(name: string, semis: number): string {
+	if (!semis) return name;
+	const m = name.match(/^([A-G][#b]?)([^/]*)(?:\/([A-G][#b]?))?$/);
+	if (!m) return name;
+	const r = rootPc(m[1]);
+	if (r == null) return name;
+	// Spell up-shifts with sharps (Bb/Eb/F instruments land in sharp keys),
+	// down-shifts with flats — keeps accidentals sensible for common cases.
+	const spell = semis > 0 ? SHARP_PC : FLAT_PC;
+	const pcv = (n: number) => spell[((n + semis) % 12 + 12) % 12];
+	const nr = pcv(r);
+	let bass = "";
+	if (m[3]) {
+		const b = rootPc(m[3]);
+		if (b != null) bass = "/" + pcv(b);
+	}
+	return nr + (m[2] || "") + bass;
+}
+
 /** DSL mode from an explicit `mode:` directive, else inferred from the body. */
 function dslMode(source: string): "tab" | "chords" | "notation" {
 	const m = source.match(/^\s*mode\s*:\s*(tab|chords|notation)\s*$/im);
@@ -171,8 +213,10 @@ export default class MusicNotationPlugin extends Plugin {
 						);
 					}
 				} else if (dsl && dslMode(source) === "notation") {
-					const xml = notationToMusicXML(parseNotation(source));
-					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false));
+					const model = parseNotation(source);
+					const xml = notationToMusicXML(model);
+					const semis = transposeSemis(model.directives.transpose);
+					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false, undefined, semis));
 				} else {
 					const { inputFrom, data, strip } = this.prepare(source, dsl);
 					target.appendChild(this.renderSvg(tk, data, inputFrom, px, strip));
@@ -212,11 +256,13 @@ export default class MusicNotationPlugin extends Plugin {
 		inputFrom: InputFormat,
 		px: number,
 		strip: boolean,
-		connections?: unknown
+		connections?: unknown,
+		transpose = 0
 	): SVGElement {
 		const f = this.settings.spacing / 100;
 		tk.setOptions({
 			inputFrom,
+			transpose: transpose ? String(transpose) : "",
 			scale: this.settings.scale,
 			adjustPageHeight: true,
 			pageWidth: Math.round((px * 100) / this.settings.scale),
@@ -318,11 +364,12 @@ export default class MusicNotationPlugin extends Plugin {
 	 */
 	private renderChords(source: string, target: HTMLElement) {
 		const parsed = parseChords(source) as {
-			directives: { capo?: string };
+			directives: { capo?: string; transpose?: string };
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			blocks: any[];
 		};
 		const { directives, blocks } = parsed;
+		const semis = transposeSemis(directives.transpose);
 		if (directives.capo) {
 			target.createDiv({
 				cls: "music-notation-tuning",
@@ -330,7 +377,7 @@ export default class MusicNotationPlugin extends Plugin {
 			});
 		}
 		const chordName = (parent: HTMLElement, name: string) =>
-			this.chordNameEl(parent, name);
+			this.chordNameEl(parent, transposeChord(name, semis));
 		// chord stack above a word (one or more chords)
 		const chordsAbove = (word: HTMLElement, names: string[]) => {
 			const c = word.createSpan({ cls: "cl-chord" });

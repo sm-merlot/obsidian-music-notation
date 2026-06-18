@@ -87,6 +87,13 @@ x   |
 ````
 (a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
 
+**Transpose (per sheet)** — add `transpose:` to the header of a `chords` or `notation`
+block and it shifts everything: write the chart in concert pitch, set `transpose: Bb`
+and a trumpet player reads it in their key. Value is an **instrument** (`Bb`, `Eb`,
+`F`), **semitones** (`2`, `-3`), or an **interval** (`M2`, `P5`, `-m3`). In `notation`
+the staff pitches and chord symbols both move; in `chords` the chord names move.
+(Chord *diagrams* and `tab` grids are not transposed — their frets are literal.)
+
 ### `music-verovio` — raw escape hatch
 
 Put **MusicXML** or **ABC** inside a fenced `music-verovio` block. The format is
