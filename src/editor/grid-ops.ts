@@ -121,10 +121,21 @@ function systemGridRows(lines: string[], b: Block, line: number): number[] {
 		if (j < b.start) return [];
 		line = j;
 	}
+	// Expand across a SINGLE blank line (an interior pitch step) but stop at a
+	// run of 2+ blanks (a stave separator), a section, or the fence.
+	const isBlank = (i: number) => (lines[i] || "").trim() === "";
 	let top = line;
 	let bot = line;
-	while (top - 1 >= b.start && inSystem(lines[top - 1])) top--;
-	while (bot + 1 <= b.end && inSystem(lines[bot + 1])) bot++;
+	while (top - 1 >= b.start) {
+		if (inSystem(lines[top - 1])) { top--; continue; }
+		if (isBlank(top - 1) && top - 2 >= b.start && inSystem(lines[top - 2])) { top -= 2; continue; }
+		break;
+	}
+	while (bot + 1 <= b.end) {
+		if (inSystem(lines[bot + 1])) { bot++; continue; }
+		if (isBlank(bot + 1) && bot + 2 <= b.end && inSystem(lines[bot + 2])) { bot += 2; continue; }
+		break;
+	}
 	const rows: number[] = [];
 	for (let i = top; i <= bot; i++) if (gridStart(lines[i]) >= 0) rows.push(i);
 	return rows;
@@ -200,22 +211,31 @@ export function addSystem(lines: string[], pos: Pos): Edit | null {
 	// lines, blank the notes. Works for tab and notation.
 	const insertAfter = Math.max(...rows);
 	const clone = rows.map((r) => blankRow(lines[r]));
-	const block = ["", ...clone];
+	// Notation staves need empty rows above/below for ledger-line notes. Use
+	// spacer rows that carry the barline structure (spaces + `|`) so they're real
+	// pitch rows, not blank separators. Tab string rows don't need the headroom.
+	const tabLike = rows.some((r) => /^\s*[A-Ga-g][#b]?\s*:/.test(lines[r]));
+	const barred = rows.find((r) => lines[r].includes("|"));
+	const spacer = !tabLike && barred != null ? lines[barred].replace(/[^|]/g, " ") : null;
+	const head = spacer ? [spacer, spacer, spacer] : [];
+	// 2 blank rows = stave separator (both before and after, to isolate the new stave)
+	const block = ["", "", ...head, ...clone, ...head, "", ""];
 	const inner = lines.slice(b.start, b.end + 1);
 	const at = insertAfter - b.start + 1;
 	inner.splice(at, 0, ...block);
-	const topDoc = b.start + at + 1; // skip the blank line
+	const topDoc = b.start + at + 2 + head.length; // skip 2 blanks + headroom -> first staff row
 	const s = gridStart(clone[0]);
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topDoc, ch: s >= 0 ? s : 0 } };
 }
 
-/** Empty a grid row: keep its label and barlines, replace notes with the fill. */
+/** Empty a grid row: keep its label/gutter and barlines, replace notes with fill. */
 function blankRow(text: string): string {
 	const s = gridStart(text);
-	const label = s >= 0 ? text.slice(0, s) : "";
 	const f = fillChar(text);
-	const content = (s >= 0 ? text.slice(s) : text).replace(/[^|]/g, f);
-	return label + content;
+	// labelled row (tab `e:`) -> keep the label; otherwise keep the leading gutter
+	// (the spaces before an opening `|`) so it isn't turned into dashes.
+	const keep = s > 0 ? s : text.match(/^\s*/)![0].length;
+	return text.slice(0, keep) + text.slice(keep).replace(/[^|]/g, f);
 }
 
 /** Align every system in the block: pad each row's bars to the per-column max so

@@ -73,7 +73,14 @@ export function parseNotation(src) {
 		if (cur.rows.length) systems.push(cur);
 		cur = { section: null, rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null };
 	};
+	let blanks = 0;
 	for (const l of body) {
+		if (l.trim() === "") { blanks++; continue; }
+		// A run of 2+ blank rows separates staves; a single blank is an interior
+		// pitch step (it sets vertical distance), so keep it in the current system.
+		if (blanks >= 2) pushCur();
+		else for (let k = 0; k < blanks; k++) cur.rows.push("");
+		blanks = 0;
 		const sec = l.match(/^\s*\[(.+?)\]\s*$/);
 		if (sec) { pushCur(); cur.section = sec[1]; continue; }
 		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);

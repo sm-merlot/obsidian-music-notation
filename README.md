@@ -62,7 +62,8 @@ compact `chord C = x32010`.
 blank rows between are spaces, and each row is one pitch step (anchored by `clef:` +
 `key:`). A note is `x` (natural-in-key), `#`, `b` or `n` at its row+column; `n` forces
 a natural (cancels a key-signature sharp/flat with a ♮). `_` sustains it (duration);
-`|` = barline; `[Section]` separates staves. `L:` lyrics and `H:` chords render on the
+`|` = barline; a run of **2+ blank lines** (or a `[Section]`) starts a new stave —
+a single blank line is an interior pitch step. `L:` lyrics and `H:` chords render on the
 staff. It engraves to real notation (jazz lead sheets, vocal/piano).
 
 **Aligning chords/lyrics:** start every row — the staff *and* the `H:`/`L:` rows — with
