@@ -189,14 +189,22 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	const b = blockAt(lines, cur);
 	if (!b) return null;
 	const d = directives(lines, b);
-	let rows: number[];
+	const rows: number[] = [];
+	const hlRows: number[] = [];
+	// span of the set: notation = the whole multi-staff chunk (up to ===/section/
+	// directive/fence); tab = the single system
+	let top: number;
+	let bot: number;
 	if (d.mode === "notation") {
-		// every staff in the set (across double-blanks, up to a === / section / fence)
-		const [top, bot] = chunkSpan(lines, b, cur);
-		rows = [];
-		for (let i = top; i <= bot; i++) if (gridStart(lines[i]) >= 0) rows.push(i);
+		[top, bot] = chunkSpan(lines, b, cur);
 	} else {
-		rows = systemGridRows(lines, b, cur);
+		const sp = systemSpan(lines, b, cur);
+		if (!sp) return null;
+		[top, bot] = sp;
+	}
+	for (let i = top; i <= bot; i++) {
+		if (gridStart(lines[i]) >= 0) rows.push(i);
+		else if (isHL(lines[i])) hlRows.push(i);
 	}
 	if (!rows.length) return null;
 	const inner = lines.slice(b.start, b.end + 1);
@@ -216,6 +224,13 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 		else if (padded.includes("|") || !systemHasBars) inner[i] = padded + "|" + f.repeat(w); // open style: ...- -> ...-|----
 		else inner[i] = padded + f.repeat(w + 1); // ledger/accidental row in a barred system: keep aligned, no stray |
 		if (r === cursorLine) cursorCh = padded.endsWith("|") ? R : R + 1;
+	}
+	// auto-fill H:/L: rows with spaces to the new width, so chords/lyrics can be
+	// overtyped anywhere across the bar without the row being too short
+	const newMax = Math.max(...rows.map((r) => inner[r - b.start].length));
+	for (const r of hlRows) {
+		const i = r - b.start;
+		if (inner[i].length < newMax) inner[i] = inner[i] + " ".repeat(newMax - inner[i].length);
 	}
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cursorLine, ch: cursorCh } };
 }

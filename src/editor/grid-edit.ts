@@ -42,8 +42,21 @@ function lineInMusic(state: EditorState, pos: number): boolean {
 	return musicBlocks(state.doc).some((b) => n >= b.start && n <= b.end);
 }
 
-// Rewrite plain single-cursor typing inside a grid row: drop "." (-> space) and
-// overtype the char under the cursor.
+// Column where overtype content begins: after an `H:`/`L:` label, else the grid
+// content start (-1 = not an overtype row).
+function contentStart(text: string): number {
+	const hl = text.match(/^\s*[HhLl]\s*:\s?/);
+	if (hl) return hl[0].length;
+	return gridStart(text);
+}
+// Fill char for overtype/backspace restore: space on H:/L: (and note) rows, `-` on
+// dash/string rows.
+function fillFor(text: string): string {
+	return /^\s*[HhLl]\s*:/.test(text) ? " " : fillChar(text);
+}
+
+// Overtype single-cursor typing on a grid OR H:/L: row: replace the char under the
+// cursor (keeps columns aligned); at end-of-line it appends as normal.
 const gridInput = EditorState.transactionFilter.of((tr) => {
 	if (!tr.docChanged || !tr.isUserEvent("input")) return tr;
 	if (tr.startState.selection.ranges.length !== 1) return tr;
@@ -65,21 +78,14 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 			return;
 		}
 		const line = doc.lineAt(fromA);
-		const start = gridStart(line.text);
-		// `.`→space revert applies to ANY line in the block (kills the macOS
-		// double-space->". " on H:/L:/blank lines too, not just grid rows)
-		const text = insText.replace(/\./g, " ");
-		let to = fromA;
-		// overtype: replace the char under the cursor, but ONLY in grid content and
+		const os = contentStart(line.text); // grid OR H:/L: content
+		// overtype: replace the char under the cursor, in grid/H:/L: content only and
 		// never past the end of the line (so appending still works)
-		if (start >= 0 && fromA - line.from >= start && fromA < line.to) {
-			to = Math.min(line.to, fromA + text.length);
-		}
-		if (text === insText && to === fromA) {
-			handled = false; // nothing to change; let it through untouched
+		if (os < 0 || fromA - line.from < os || fromA >= line.to) {
+			handled = false;
 			return;
 		}
-		newChange = { from: fromA, to, insert: text };
+		newChange = { from: fromA, to: Math.min(line.to, fromA + insText.length), insert: insText };
 		changed = true;
 	});
 
@@ -120,12 +126,12 @@ const gridKeys = Prec.highest(
 				if (!lineInMusic(state, pos)) return false;
 				const line = state.doc.lineAt(pos);
 				if (pos === line.from) return false; // line start -> default (join lines)
-				const start = gridStart(line.text);
+				const os = contentStart(line.text);
 				const col = pos - line.from;
-				if (start >= 0 && col > start && pos < line.to) {
-					// grid content: restore the row's own fill (`-` on string/staff rows,
-					// space on note rows), stepping over an existing fill / barline
-					const fill = fillChar(line.text);
+				if (os >= 0 && col > os && pos < line.to) {
+					// grid/H:/L: content: restore the row's own fill (`-` on dash rows,
+					// space on note + H:/L: rows), stepping over an existing fill / barline
+					const fill = fillFor(line.text);
 					const prev = state.doc.sliceString(pos - 1, pos);
 					if (prev === fill || prev === "|") {
 						view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));

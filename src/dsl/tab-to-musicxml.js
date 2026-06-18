@@ -52,9 +52,11 @@ export function harmonyXml(name) {
 	const bass = m[3]
 		? `<bass><bass-step>${m[3][0]}</bass-step>${alt(m[3][1]) ? `<bass-alter>${alt(m[3][1])}</bass-alter>` : ""}</bass>`
 		: "";
+	// show extensions with proper accidental glyphs (m7b5 -> m7♭5, maj7#11 -> maj7♯11)
+	const restText = rest.replace(/#/g, "♯").replace(/b/g, "♭");
 	return (
 		`<harmony print-frame="no"><root><root-step>${m[1][0]}</root-step>${rootA}</root>` +
-		`<kind text="${esc(rest)}">${kind}</kind>${bass}</harmony>`
+		`<kind text="${esc(restText)}">${kind}</kind>${bass}</harmony>`
 	);
 }
 
