@@ -65,22 +65,25 @@ export function parseNotation(src) {
 
 	// split body into systems by [Section]; each system = staff rows + H:/L:
 	const systems = [];
-	let cur = { section: null, rows: [], lyric: null, chordRow: null };
+	let cur = { section: null, rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null };
 	const pushCur = () => {
 		// trim leading/trailing all-blank rows (padding, not pitches)
 		while (cur.rows.length && cur.rows[0].trim() === "") cur.rows.shift();
 		while (cur.rows.length && cur.rows[cur.rows.length - 1].trim() === "") cur.rows.pop();
 		if (cur.rows.length) systems.push(cur);
-		cur = { section: null, rows: [], lyric: null, chordRow: null };
+		cur = { section: null, rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null };
 	};
 	for (const l of body) {
 		const sec = l.match(/^\s*\[(.+?)\]\s*$/);
 		if (sec) { pushCur(); cur.section = sec[1]; continue; }
 		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);
-		// H:/L: labels are a non-timeline prefix: content column 0 = the start of
-		// the staff (beat 1), so a chord written right after `H: ` lands on beat 1.
-		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; continue; }
-		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; continue; }
+		// Store both forms of H:/L: rows: `*` = label stripped (relative: content
+		// col 0 = beat 1) and `*Abs` = label blanked (absolute columns). With an
+		// opening barline the staff and H:/L: share a margin, so absolute columns
+		// line up visually; without one we fall back to the relative form.
+		const blankLabel = (s) => s.replace(/^(\s*[A-Za-z]+\s*:\s?)/, (m) => " ".repeat(m.length));
+		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; cur.lyricAbs = blankLabel(l); continue; }
+		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; cur.chordRowAbs = blankLabel(l); continue; }
 		cur.rows.push(l);
 	}
 	pushCur();
@@ -120,7 +123,9 @@ function resolveSystem(sys, dir) {
 			const override = ch === "#" ? 1 : ch === "b" ? -1 : ch === "n" ? 0 : null;
 			const alter = override === null ? keyAlter(p.letter, dir.fifths) : override;
 			if (!onsetsByCol.has(c)) onsetsByCol.set(c, []);
-			onsetsByCol.get(c).push({ step: p.letter, alter, octave: p.octave, span });
+			// `acc` = the accidental the user typed (#, b, n) so it's drawn explicitly
+			// — e.g. `n` neutralises a key-signature sharp/flat with a ♮.
+			onsetsByCol.get(c).push({ step: p.letter, alter, octave: p.octave, span, acc: override });
 			noteCols.add(c);
 			c += span - 1;
 		}
@@ -153,12 +158,24 @@ function resolveSystem(sys, dir) {
 	const spanOf = (col) => tupletSpans.find((sp) => col > sp.open && col < sp.close) || null;
 
 	// build events per bar (a column with onsets = a chord; rest fills gaps)
-	const segs = [];
-	let start = 0;
-	for (const b of bounds.concat([width])) { segs.push([start, b]); start = b + 1; }
+	// An opening barline (a leading `|` with no onsets to its left) sets a shared
+	// origin so the staff and H:/L: rows line up by absolute column; the gutter
+	// before it (labels etc.) is dropped, and beat 1 is the char right after it.
+	let bnds = bounds;
+	const hasOpenBar = bnds.length > 0 && ![...onsetsByCol.keys()].some((c) => c < bnds[0]);
+	let segStart = 0;
+	if (hasOpenBar) { segStart = bnds[0] + 1; bnds = bnds.slice(1); }
 
-	const lyr = sys.lyric ? syllablesFor(sys.lyric) : [];
-	const chordToks = sys.chordRow ? syllablesFor(sys.chordRow) : [];
+	const segs = [];
+	let start = segStart;
+	for (const b of bnds.concat([width])) { segs.push([start, b]); start = b + 1; }
+
+	// With an opening barline, read H:/L: in absolute columns (ignoring any `|`
+	// the user drew there); otherwise use the label-stripped (relative) form.
+	const lyrSrc = hasOpenBar ? (sys.lyricAbs || "").replace(/\|/g, " ") : sys.lyric;
+	const chordSrc = hasOpenBar ? (sys.chordRowAbs || "").replace(/\|/g, " ") : sys.chordRow;
+	const lyr = lyrSrc ? syllablesFor(lyrSrc) : [];
+	const chordToks = chordSrc ? syllablesFor(chordSrc) : [];
 
 	const bars = segs
 		.filter(([s, e]) => e > s)

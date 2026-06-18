@@ -60,10 +60,16 @@ compact `chord C = x32010`.
 
 `mode: notation` is an **ASCII staff** you draw: rows of `-` are the 5 staff lines,
 blank rows between are spaces, and each row is one pitch step (anchored by `clef:` +
-`key:`). A note is `x` (natural-in-key), `#`, `b` or `n` at its row+column; `_`
-sustains it (duration); `|` = barline; `[Section]` separates staves. `L:` lyrics and
-`H:` chords render on the staff. It engraves to real notation (jazz lead sheets,
-vocal/piano).
+`key:`). A note is `x` (natural-in-key), `#`, `b` or `n` at its row+column; `n` forces
+a natural (cancels a key-signature sharp/flat with a ♮). `_` sustains it (duration);
+`|` = barline; `[Section]` separates staves. `L:` lyrics and `H:` chords render on the
+staff. It engraves to real notation (jazz lead sheets, vocal/piano).
+
+**Aligning chords/lyrics:** start every row — the staff *and* the `H:`/`L:` rows — with
+an opening `|` in the same column. Then columns are absolute (WYSIWYG): a chord sits
+directly above the note beneath it, and beat 1 is the char right after the opening `|`
+(the `H:` label sits in the gutter before it). Without an opening `|`, `H:`/`L:` columns
+are counted from the staff start instead (chord written right after `H: ` = beat 1).
 
 ````markdown
 ```music

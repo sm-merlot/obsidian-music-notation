@@ -60,10 +60,14 @@ export function notationToMusicXML(model) {
 			}
 			e.notes.forEach((n, i) => {
 				const alter = n.alter ? `<alter>${n.alter}</alter>` : "";
+				// draw the accidental the user typed (sharp/flat/natural) so e.g. `n`
+				// shows a ♮ that cancels the key signature
+				const accName = n.acc === 1 ? "sharp" : n.acc === -1 ? "flat" : n.acc === 0 ? "natural" : "";
+				const accidental = accName ? `<accidental>${accName}</accidental>` : "";
 				body +=
 					`<note>${i > 0 ? "<chord/>" : ""}` +
 					`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
-					`<duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}${timeMod}` +
+					`<duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}${accidental}${timeMod}` +
 					`${i === 0 ? beam : ""}${i === 0 ? tupletNot : ""}${i === 0 ? lyric : ""}</note>`;
 			});
 		});
