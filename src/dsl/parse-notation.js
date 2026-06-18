@@ -77,6 +77,8 @@ export function parseNotation(src) {
 		const sec = l.match(/^\s*\[(.+?)\]\s*$/);
 		if (sec) { pushCur(); cur.section = sec[1]; continue; }
 		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);
+		// H:/L: labels are a non-timeline prefix: content column 0 = the start of
+		// the staff (beat 1), so a chord written right after `H: ` lands on beat 1.
 		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; continue; }
 		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; continue; }
 		cur.rows.push(l);
@@ -199,11 +201,20 @@ function resolveSystem(sys, dir) {
 				i++;
 			}
 			if (cursor < e) events.push({ col: cursor, rest: true, durFrac: (e - cursor) * dir.unitFrac, notes: [] });
-			// attach lyrics/chords (absolute column) to nearest non-rest event
+			// lyrics attach to the nearest note (they need a notehead)
 			const noteEvents = events.filter((ev) => !ev.rest && ev.col >= s && ev.col < e);
 			const nearest = (col) => noteEvents.reduce((best, ev) => (best == null || Math.abs(ev.col - col) < Math.abs(best.col - col) ? ev : best), null);
 			for (const t of lyr) if (t.col >= s && t.col < e) { const ev = nearest(t.col); if (ev) (ev.syllables ||= []).push(t.raw); }
-			for (const t of chordToks) if (t.col >= s && t.col < e) { const ev = nearest(t.col); if (ev) ev.chord = t.raw; }
+			// chords don't need a note: attach to the event at/just-before the chord's
+			// column (incl. rests), so a chord sits on the beat it's written over —
+			// beat 1 works, and an empty/rest beat can still carry a chord.
+			const inBar = events.filter((ev) => ev.col >= s && ev.col < e).sort((a, b) => a.col - b.col);
+			const atOrBefore = (col) => {
+				let best = null;
+				for (const ev of inBar) { if (ev.col <= col) best = ev; else break; }
+				return best || inBar[0] || null;
+			};
+			for (const t of chordToks) if (t.col >= s && t.col < e) { const ev = atOrBefore(t.col); if (ev) ev.chord = t.raw; }
 			return { events };
 		});
 

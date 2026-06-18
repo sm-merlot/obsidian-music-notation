@@ -47,11 +47,11 @@ export function notationToMusicXML(model) {
 				if (e.tuplet.pos !== "mid")
 					tupletNot = `<notations><tuplet type="${e.tuplet.pos}" bracket="yes"/></notations>`;
 			}
+			if (e.chord) body += harmonyXml(e.chord); // chords sit over rests too
 			if (e.rest || !e.notes.length) {
 				body += `<note><rest/><duration>${div}</duration><voice>1</voice><type>${type}</type>${dotsXml(dots)}</note>`;
 				return;
 			}
-			if (e.chord) body += harmonyXml(e.chord);
 			const beam = roles[ei] ? `<beam number="1">${roles[ei]}</beam>` : "";
 			let lyric = "";
 			if (e.syllables && e.syllables.length) {
