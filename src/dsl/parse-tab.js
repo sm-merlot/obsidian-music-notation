@@ -159,8 +159,9 @@ export function parseTab(src) {
 	// tuning: "e B G D A E" top->bottom. Map each label to a midi using octave
 	// heuristics from DEFAULT_OPEN by letter (case-sensitive e vs E distinguishes
 	// high vs low E); drop-D etc come from changing a label.
-	let tuningLabels = null;
-	if (dir.tuning) tuningLabels = dir.tuning.trim().split(/\s+/);
+	// Full tuning, top→bottom (default standard). String NUMBER comes from a
+	// label's position here — so rows can be omitted without shifting the rest.
+	const tuningLabels = (dir.tuning || "e B G D A E").trim().split(/\s+/);
 
 	const systems = [];
 	let curSection = null;
@@ -204,16 +205,19 @@ export function parseTab(src) {
 	// Resolve each system into bars of events.
 	const out = { directives: dir, systems: [] };
 	for (const sys of systems) {
-		const numStrings = sys.stringLines.length;
-		const strings = sys.stringLines.map((sl, idx) => {
+		// Map each provided row to a string number by its label's position in the
+		// tuning (consume positions in order, so duplicate labels like drop-D's
+		// two D's resolve top→bottom). Omitted rows just leave blank tab lines.
+		let cursor = 0;
+		const strings = sys.stringLines.map((sl) => {
 			const label = sl.label;
-			// string number: 1 = top line (highest), increasing downward
-			const num = idx + 1;
-			let open = DEFAULT_OPEN[label] ?? DEFAULT_OPEN[label.toUpperCase()] ?? 40;
-			if (tuningLabels && tuningLabels[idx]) {
-				const tl = tuningLabels[idx];
-				open = DEFAULT_OPEN[tl] ?? DEFAULT_OPEN[tl.toUpperCase()] ?? open;
-			}
+			let pos = tuningLabels.indexOf(label, cursor);
+			if (pos === -1) pos = tuningLabels.indexOf(label);
+			if (pos === -1) pos = cursor;
+			cursor = pos + 1;
+			const num = pos + 1; // string 1 = top line
+			const tl = tuningLabels[pos] || label;
+			const open = DEFAULT_OPEN[tl] ?? DEFAULT_OPEN[tl.toUpperCase()] ?? 40;
 			// sanitize raw-tab noise: {annotations}, a trailing repeat marker
 			// (` x2`), and a trailing barline; technique chars (h/p/b/s and
 			// slashes) are left in place — onsetsFor only reads digit runs.
