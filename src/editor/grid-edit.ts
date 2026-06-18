@@ -117,28 +117,24 @@ const gridKeys = Prec.highest(
 				const pos = sel.head;
 				if (!lineInMusic(state, pos)) return false;
 				const line = state.doc.lineAt(pos);
+				if (pos === line.from) return false; // line start -> default (join lines)
 				const start = gridStart(line.text);
-				if (start < 0) return false;
 				const col = pos - line.from;
-				if (col <= start || pos >= line.to) return false; // label/start or EOL -> normal
-				// restore the row's own fill: `-` on string/staff rows, space on
-				// notation note rows (so deleting a note clears to blank, not a dash)
-				const fill = fillChar(line.text);
-				const prev = state.doc.sliceString(pos - 1, pos);
-				// already fill, or a barline -> just step left (keep `|` so holding
-				// backspace clears a row without eating its barlines)
-				if (prev === fill || prev === "|") {
-					view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));
-				} else {
-					view.dispatch(
-						state.update({
-							changes: { from: pos - 1, to: pos, insert: fill },
-							selection: { anchor: pos - 1 },
-							scrollIntoView: true,
-							userEvent: "delete.backward",
-						})
-					);
+				if (start >= 0 && col > start && pos < line.to) {
+					// grid content: restore the row's own fill (`-` on string/staff rows,
+					// space on note rows), stepping over an existing fill / barline
+					const fill = fillChar(line.text);
+					const prev = state.doc.sliceString(pos - 1, pos);
+					if (prev === fill || prev === "|") {
+						view.dispatch(state.update({ selection: { anchor: pos - 1 }, scrollIntoView: true }));
+					} else {
+						view.dispatch(state.update({ changes: { from: pos - 1, to: pos, insert: fill }, selection: { anchor: pos - 1 }, scrollIntoView: true, userEvent: "delete.backward" }));
+					}
+					return true;
 				}
+				// anywhere else in the block (gutter, EOL, H:/L:, directives): delete a
+				// single character, never a soft-tab's worth of spaces
+				view.dispatch(state.update({ changes: { from: pos - 1, to: pos }, selection: { anchor: pos - 1 }, scrollIntoView: true, userEvent: "delete.backward" }));
 				return true;
 			},
 		},
