@@ -163,15 +163,38 @@ export interface Edit {
 	cursor: { line: number; ch: number };
 }
 
-/** Append a fresh empty bar (`|` + a measure of fill) to every grid row in the
- *  current system, after padding them to equal width so barlines line up. */
+const isSep = (t: string) =>
+	/^\s*=+\s*$/.test(t) || /^\s*\[.*\]\s*$/.test(t) || /^\s*(mode|clef|key|meter|unit|tuning|capo|title|transpose)\s*:/i.test(t);
+
+/** Full line span [top, bot] of the "set of staves" around `line` — bounded by a
+ *  `===` continuation line, a section, a directive, or the fence (NOT by blank
+ *  lines, so it spans every stave of a multi-staff system). */
+function chunkSpan(lines: string[], b: Block, line: number): [number, number] {
+	let top = line;
+	let bot = line;
+	while (top - 1 >= b.start && !isSep(lines[top - 1])) top--;
+	while (bot + 1 <= b.end && !isSep(lines[bot + 1])) bot++;
+	return [top, bot];
+}
+
+/** Append a fresh empty bar to every grid row of the current system. In notation
+ *  this spans the whole multi-staff set (all staves get a bar at once); in tab it's
+ *  the single system. Works on a sheet with no bars yet (adds the first barline). */
 export function addBar(lines: string[], pos: Pos): Edit | null {
 	const cur = pos.line;
 	const b = blockAt(lines, cur);
 	if (!b) return null;
-	const rows = systemGridRows(lines, b, cur);
-	if (!rows.length) return null;
 	const d = directives(lines, b);
+	let rows: number[];
+	if (d.mode === "notation") {
+		// every staff in the set (across double-blanks, up to a === / section / fence)
+		const [top, bot] = chunkSpan(lines, b, cur);
+		rows = [];
+		for (let i = top; i <= bot; i++) if (gridStart(lines[i]) >= 0) rows.push(i);
+	} else {
+		rows = systemGridRows(lines, b, cur);
+	}
+	if (!rows.length) return null;
 	const inner = lines.slice(b.start, b.end + 1);
 	const R = Math.max(...rows.map((r) => lines[r].length)); // current right edge
 	// bar width = an existing bar's width (so it matches), else from meter/unit
@@ -191,6 +214,31 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 		if (r === cursorLine) cursorCh = padded.endsWith("|") ? R : R + 1;
 	}
 	return { start: b.start, end: b.end, newInner: inner, cursor: { line: cursorLine, ch: cursorCh } };
+}
+
+/** Continue the current set of staves on a new line: insert a `===` then a blank
+ *  copy of the whole set (all staves, ready for the next bars). */
+export function addContinuation(lines: string[], pos: Pos): Edit | null {
+	const b = blockAt(lines, pos.line);
+	if (!b) return null;
+	const [top, bot] = chunkSpan(lines, b, pos.line);
+	let rows = lines.slice(top, bot + 1);
+	let s = 0;
+	let e = rows.length - 1;
+	while (s <= e && rows[s].trim() === "") s++;
+	while (e >= s && rows[e].trim() === "") e--;
+	rows = rows.slice(s, e + 1);
+	if (!rows.length) return null;
+	const clone = rows.map(blankRow);
+	const block = ["===", ...clone];
+	const inner = lines.slice(b.start, b.end + 1);
+	const at = bot - b.start + 1;
+	inner.splice(at, 0, ...block);
+	let fg = clone.findIndex((t) => gridStart(t) >= 0);
+	if (fg < 0) fg = 0;
+	const topDoc = b.start + at + 1 + fg; // skip the === line
+	const sc = gridStart(clone[fg]);
+	return { start: b.start, end: b.end, newInner: inner, cursor: { line: topDoc, ch: sc >= 0 ? sc : 0 } };
 }
 
 /** Width of the last (rightmost non-empty) bar on a barred grid row. */
