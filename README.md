@@ -40,7 +40,8 @@ two frets; a tie also lets you hold a note across a slot to line lyrics up.
 Consecutive eighths (or shorter) are beamed by beat automatically.
 
 Each digit is its own note (a column is a time slot), so `333` = three notes. For a
-fret of 10 or more, wrap it in parentheses: `(12)` = fret twelve in one slot.
+fret of 10 or more, put a `)` right after its digits: `12)3` = fret twelve then fret
+three.
 
 `mode: notation` takes ABC and engraves a staff (jazz lead sheets, vocal/piano). The
 `chords` mode (chord-over-lyric) is coming.
