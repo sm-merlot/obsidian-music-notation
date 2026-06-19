@@ -101,7 +101,14 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 
 const gridKeys = Prec.highest(
 	keymap.of([
-		// Enter inside a music block = a bare newline (no auto-indent / list continue).
+		// Enter inside a music block:
+		//   - on a staff / ledger-with-notes row -> drop a fresh ledger row below,
+		//     all spaces and the same width, cursor in the same column (so you can
+		//     overtype a note above/below the staff without shoving anything);
+		//   - on an already all-space ledger row -> drop a truly empty row below
+		//     (escape hatch to start a new staff);
+		//   - anywhere else (directives, sections, H:/L:) -> a bare newline (no
+		//     auto-indent / list continue).
 		{
 			key: "Enter",
 			run: (view) => {
@@ -109,6 +116,20 @@ const gridKeys = Prec.highest(
 				const sel = state.selection.main;
 				if (state.selection.ranges.length !== 1 || !sel.empty) return false;
 				if (!lineInMusic(state, sel.head)) return false;
+				const line = state.doc.lineAt(sel.head);
+				const allSpace = line.text.length > 0 && line.text.trim() === "";
+				if (allSpace) {
+					// already on a blank ledger row -> empty row below, cursor at its start
+					view.dispatch(state.update({ changes: { from: line.to, insert: "\n" }, selection: { anchor: line.to + 1 }, scrollIntoView: true, userEvent: "input" }));
+					return true;
+				}
+				if (gridStart(line.text) >= 0) {
+					// staff / ledger row -> all-space ledger row below, same column
+					const ch = sel.head - line.from;
+					const spaces = " ".repeat(line.text.length);
+					view.dispatch(state.update({ changes: { from: line.to, insert: "\n" + spaces }, selection: { anchor: line.to + 1 + ch }, scrollIntoView: true, userEvent: "input" }));
+					return true;
+				}
 				view.dispatch(state.update(state.replaceSelection("\n"), { scrollIntoView: true, userEvent: "input" }));
 				return true;
 			},
@@ -143,6 +164,37 @@ const gridKeys = Prec.highest(
 				// anywhere else in the block (gutter, EOL, H:/L:, directives): delete a
 				// single character, never a soft-tab's worth of spaces
 				view.dispatch(state.update({ changes: { from: pos - 1, to: pos }, selection: { anchor: pos - 1 }, scrollIntoView: true, userEvent: "delete.backward" }));
+				return true;
+			},
+		},
+		// Delete mirrors Backspace forward: inside a grid row, turn the char UNDER the
+		// cursor into the row's fill and leave the cursor put (so the row keeps its
+		// columns instead of shuffling left). Steps right over an existing fill /
+		// barline. In the label, or at end-of-line, falls back to a normal delete.
+		{
+			key: "Delete",
+			run: (view) => {
+				const { state } = view;
+				const sel = state.selection.main;
+				if (state.selection.ranges.length !== 1 || !sel.empty) return false;
+				const pos = sel.head;
+				if (!lineInMusic(state, pos)) return false;
+				const line = state.doc.lineAt(pos);
+				if (pos === line.to) return false; // line end -> default (join next line)
+				const os = contentStart(line.text);
+				const col = pos - line.from;
+				if (os >= 0 && col >= os) {
+					const fill = fillFor(line.text);
+					const cur = state.doc.sliceString(pos, pos + 1);
+					if (cur === fill || cur === "|") {
+						view.dispatch(state.update({ selection: { anchor: pos + 1 }, scrollIntoView: true }));
+					} else {
+						view.dispatch(state.update({ changes: { from: pos, to: pos + 1, insert: fill }, selection: { anchor: pos }, scrollIntoView: true, userEvent: "delete.forward" }));
+					}
+					return true;
+				}
+				// elsewhere in the block (gutter, label, directives): delete a single char
+				view.dispatch(state.update({ changes: { from: pos, to: pos + 1 }, selection: { anchor: pos }, scrollIntoView: true, userEvent: "delete.forward" }));
 				return true;
 			},
 		},

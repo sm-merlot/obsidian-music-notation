@@ -191,6 +191,7 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	const d = directives(lines, b);
 	const rows: number[] = [];
 	const hlRows: number[] = [];
+	const spaceRows: number[] = []; // all-space ledger rows (length>0) — kept full-width
 	// span of the set: notation = the whole multi-staff chunk (up to ===/section/
 	// directive/fence); tab = the single system
 	let top: number;
@@ -205,6 +206,7 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	for (let i = top; i <= bot; i++) {
 		if (gridStart(lines[i]) >= 0) rows.push(i);
 		else if (isHL(lines[i])) hlRows.push(i);
+		else if (lines[i].length > 0 && lines[i].trim() === "") spaceRows.push(i); // ledger row (vs an empty "" stave separator)
 	}
 	if (!rows.length) return null;
 	const inner = lines.slice(b.start, b.end + 1);
@@ -228,7 +230,7 @@ export function addBar(lines: string[], pos: Pos): Edit | null {
 	// auto-fill H:/L: rows with spaces to the new width, so chords/lyrics can be
 	// overtyped anywhere across the bar without the row being too short
 	const newMax = Math.max(...rows.map((r) => inner[r - b.start].length));
-	for (const r of hlRows) {
+	for (const r of [...hlRows, ...spaceRows]) {
 		const i = r - b.start;
 		if (inner[i].length < newMax) inner[i] = inner[i] + " ".repeat(newMax - inner[i].length);
 	}
