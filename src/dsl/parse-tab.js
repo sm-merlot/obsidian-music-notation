@@ -49,9 +49,16 @@ const CONNECTORS = "hps^";
 // but does NOT advance time. `-` = a rest (one time unit). Each digit is its own
 // note (`333` = three); a fret of 10+ ends with `)` grouping its last two digits.
 // `conn` is the connector char since the previous onset.
-function onsetsFor(barText) {
+//
+// `initialConn` is a connector carried over from the end of the PREVIOUS bar on
+// this string (a trailing `^`/`s`/`h`/`p` written just before the barline). It
+// attaches to this bar's first onset, so a tie/slide can span a barline — even
+// into a downbeat — without an extra column shifting the note off the beat.
+// Returns the onsets plus any `trailingConn` left dangling at the bar's end, for
+// the caller to hand to the next bar on this string.
+function onsetsFor(barText, initialConn = null) {
 	const onsets = [];
-	let pendingConn = null;
+	let pendingConn = initialConn;
 	let spaces = 0; // spaces seen so far (subtracted from col to get tcol)
 	const push = (col, fret) => {
 		onsets.push({ col, tcol: col - spaces, fret, conn: pendingConn });
@@ -80,16 +87,23 @@ function onsetsFor(barText) {
 			pendingConn = c; // only meaningful between two frets
 		}
 	}
-	return onsets;
+	// Any connector still pending had no onset after it in THIS bar — hand it to
+	// the next bar so it can bind the barline-spanning onset there.
+	return { onsets, trailingConn: pendingConn };
 }
 
 // Build events for one bar. `col` (char column) drives lyric/chord alignment;
 // durations come from `tcol` gaps (spaces don't advance time). barTimeLen = the
 // bar length in time units (non-space chars) for the trailing note's duration.
-function eventsForBar(strings, unitFrac, barTimeLen) {
+// `carry` (optional) is a Map<stringNum, connector> threaded across bars so a
+// trailing connector on a string carries into that string's next bar.
+function eventsForBar(strings, unitFrac, barTimeLen, carry) {
 	const byCol = new Map(); // char col -> { tcol, notes:[] }
 	for (let s = 0; s < strings.length; s++) {
-		for (const o of onsetsFor(strings[s].barText)) {
+		const initialConn = carry ? carry.get(strings[s].num) ?? null : null;
+		const { onsets, trailingConn } = onsetsFor(strings[s].barText, initialConn);
+		if (carry) carry.set(strings[s].num, trailingConn);
+		for (const o of onsets) {
 			if (!byCol.has(o.col)) byCol.set(o.col, { tcol: o.tcol, notes: [] });
 			byCol.get(o.col).notes.push({
 				stringNum: strings[s].num,
@@ -204,8 +218,12 @@ export function parseTab(src) {
 		i++;
 	}
 
-	// Resolve each system into bars of events.
+	// Resolve each system into bars of events. `carry` threads a trailing
+	// connector on a string into that string's next bar — across bar AND system
+	// (block) boundaries — so ties/slides can span barlines, including into a
+	// downbeat. Keyed by string number, which is stable across systems.
 	const out = { directives: dir, systems: [] };
+	const carry = new Map();
 	for (const sys of systems) {
 		// Map each provided row to a string number by its label's position in the
 		// tuning (consume positions in order, so duplicate labels like drop-D's
@@ -247,7 +265,7 @@ export function parseTab(src) {
 				1,
 				...barStrings.map((s) => s.barText.replace(/ /g, "").length)
 			);
-			const events = eventsForBar(barStrings, dir.unitFrac, barTimeLen);
+			const events = eventsForBar(barStrings, dir.unitFrac, barTimeLen, carry);
 			for (const e of events) {
 				e.absCol = cumOffset + e.col;
 				allEvents.push(e);
