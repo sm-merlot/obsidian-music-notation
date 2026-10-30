@@ -16,6 +16,7 @@ import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
+import { ScreenWake } from "./screen-wake";
 import { addBarOrSystem, addContinuation, insertColumn, removeColumn, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
 
 interface MusicNotationSettings {
@@ -120,9 +121,12 @@ export default class MusicNotationPlugin extends Plugin {
 	settings: MusicNotationSettings;
 	/** Verovio toolkit is created once (WASM init is expensive) and reused. */
 	private toolkit: Promise<VerovioToolkit> | null = null;
+	private screenWake = new ScreenWake(this);
 
 	async onload() {
 		await this.loadSettings();
+		// "Keep screen on" header button on notes and PDFs (music stand mode).
+		this.screenWake.load();
 		this.addSettingTab(new MusicNotationSettingTab(this.app, this));
 		// `music` = the friendly DSL (tab / notation). `music-verovio` = raw
 		// MusicXML/ABC straight to the engine (escape hatch / debugging).
@@ -182,6 +186,10 @@ export default class MusicNotationPlugin extends Plugin {
 			name: "Format (align barlines)",
 			editorCallback: (editor) => apply(editor, formatBlock, "Place the cursor in a music block first"),
 		});
+	}
+
+	onunload() {
+		this.screenWake.unload();
 	}
 
 	/**
