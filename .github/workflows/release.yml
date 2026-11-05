@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: homelab
+    runs-on: homelab-2gb
     steps:
       - uses: actions/checkout@v4
 
