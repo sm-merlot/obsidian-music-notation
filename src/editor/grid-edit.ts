@@ -5,9 +5,13 @@
 //     of a line it appends as normal, so you can still extend a row.
 //   - revert "." -> " " inside the grid (kills the macOS double-space->". ").
 //   - plain Enter (no auto-indent / list continuation) inside the block.
+//   - Shift+Space: open a gap -- insert the row's fill at the cursor, pushing the
+//     rest of THIS row right (the inverse of Shift+Delete / Shift+Backspace).
+//   - Insert (macOS reports a PC Insert key as "Help"): toggle insert mode, where
+//     typing/Backspace/Delete behave like a normal editor. An INS panel shows.
 // All scoped to ```music blocks only; `music-verovio` (raw XML/ABC) is left alone.
-import { EditorState, Prec, Text, Extension } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import { EditorState, Prec, Text, Extension, StateField, StateEffect } from "@codemirror/state";
+import { keymap, showPanel, EditorView, Panel } from "@codemirror/view";
 import { gridStart, fillChar } from "./grid-ops";
 
 /** Inner line ranges (1-based, inclusive) of every ```music fenced block. */
@@ -55,11 +59,39 @@ function fillFor(text: string): string {
 	return /^\s*[HhLl]\s*:/.test(text) ? " " : fillChar(text);
 }
 
+// Insert mode: per-editor toggle. While on, the overtype filter and the fill-style
+// Backspace/Delete stand aside so the row shifts like ordinary text.
+const toggleInsert = StateEffect.define<null>();
+function insertPanel(): Panel {
+	const dom = document.createElement("div");
+	dom.className = "music-insert-mode";
+	dom.textContent = "INS \u2014 music insert mode (Insert to leave)";
+	return { dom };
+}
+const insertMode = StateField.define<boolean>({
+	create: () => false,
+	update: (on, tr) => {
+		for (const e of tr.effects) if (e.is(toggleInsert)) on = !on;
+		return on;
+	},
+	provide: (f) => showPanel.from(f, (on) => (on ? insertPanel : null)),
+});
+function runToggleInsert(view: EditorView): boolean {
+	if (!lineInMusic(view.state, view.state.selection.main.head)) return false;
+	view.dispatch({ effects: toggleInsert.of(null) });
+	return true;
+}
+function plainDelete(view: EditorView, from: number, to: number, anchor: number, ev: string): true {
+	view.dispatch(view.state.update({ changes: { from, to }, selection: { anchor }, scrollIntoView: true, userEvent: ev }));
+	return true;
+}
+
 // Overtype single-cursor typing on a grid OR H:/L: row: replace the char under the
 // cursor (keeps columns aligned); at end-of-line it appends as normal.
 const gridInput = EditorState.transactionFilter.of((tr) => {
 	if (!tr.docChanged || !tr.isUserEvent("input")) return tr;
 	if (tr.startState.selection.ranges.length !== 1) return tr;
+	if (tr.startState.field(insertMode, false)) return tr; // insert mode: plain typing
 
 	const doc = tr.startState.doc;
 	let handled = true;
@@ -101,6 +133,26 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 
 const gridKeys = Prec.highest(
 	keymap.of([
+		{ key: "Insert", run: runToggleInsert },
+		{ key: "Help", run: runToggleInsert }, // macOS name for a PC keyboard's Insert
+		// Shift+Space: open a one-char gap in grid/H:/L: content -- insert the row's
+		// fill (`-` or space) at the cursor, push the rest of this row right, cursor
+		// stays on the new fill so the next keystroke overtypes it.
+		{
+			key: "Shift-Space",
+			run: (view) => {
+				const { state } = view;
+				const sel = state.selection.main;
+				if (state.selection.ranges.length !== 1 || !sel.empty) return false;
+				const pos = sel.head;
+				if (!lineInMusic(state, pos)) return false;
+				const line = state.doc.lineAt(pos);
+				const os = contentStart(line.text);
+				if (os < 0 || pos - line.from < os) return false;
+				view.dispatch(state.update({ changes: { from: pos, insert: fillFor(line.text) }, selection: { anchor: pos }, scrollIntoView: true, userEvent: "input" }));
+				return true;
+			},
+		},
 		// Enter inside a music block:
 		//   - on a staff / ledger-with-notes row -> drop a fresh ledger row below,
 		//     all spaces and the same width, cursor in the same column (so you can
@@ -147,6 +199,7 @@ const gridKeys = Prec.highest(
 				if (!lineInMusic(state, pos)) return false;
 				const line = state.doc.lineAt(pos);
 				if (pos === line.from) return false; // line start -> default (join lines)
+				if (state.field(insertMode, false)) return plainDelete(view, pos - 1, pos, pos - 1, "delete.backward");
 				const os = contentStart(line.text);
 				const col = pos - line.from;
 				if (os >= 0 && col > os && pos < line.to) {
@@ -181,6 +234,7 @@ const gridKeys = Prec.highest(
 				if (!lineInMusic(state, pos)) return false;
 				const line = state.doc.lineAt(pos);
 				if (pos === line.to) return false; // line end -> default (join next line)
+				if (state.field(insertMode, false)) return plainDelete(view, pos, pos + 1, pos, "delete.forward");
 				const os = contentStart(line.text);
 				const col = pos - line.from;
 				if (os >= 0 && col >= os) {
@@ -202,5 +256,5 @@ const gridKeys = Prec.highest(
 );
 
 export function musicGridExtension(): Extension {
-	return [gridInput, gridKeys];
+	return [insertMode, gridInput, gridKeys];
 }

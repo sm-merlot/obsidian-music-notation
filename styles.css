@@ -151,3 +151,12 @@
 	white-space: pre-wrap;
 	font-size: var(--font-smaller);
 }
+
+/* Insert-mode indicator for ```music blocks (Insert/Help key toggles). */
+.music-insert-mode {
+	padding: 2px 8px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+}
