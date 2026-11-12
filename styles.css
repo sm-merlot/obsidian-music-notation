@@ -160,3 +160,12 @@
 	color: var(--text-on-accent);
 	background: var(--interactive-accent);
 }
+
+/* Shortcuts sheet. */
+.music-shortcuts td {
+	padding: 4px 12px 4px 0;
+	vertical-align: top;
+}
+.music-shortcuts td:first-child {
+	white-space: nowrap;
+}

@@ -11,7 +11,7 @@
 //     typing/Backspace/Delete behave like a normal editor. An INS panel shows.
 // All scoped to ```music blocks only; `music-verovio` (raw XML/ABC) is left alone.
 import { EditorState, Prec, Text, Extension, StateField, StateEffect } from "@codemirror/state";
-import { keymap, showPanel, EditorView, Panel } from "@codemirror/view";
+import { keymap, showPanel, EditorView, Panel, KeyBinding } from "@codemirror/view";
 import { gridStart, fillChar } from "./grid-ops";
 
 /** Inner line ranges (1-based, inclusive) of every ```music fenced block. */
@@ -39,6 +39,10 @@ function musicBlocks(doc: Text): Array<{ start: number; end: number }> {
 	}
 	if (openLine) out.push({ start: openLine + 1, end: doc.lines }); // still being typed
 	return out;
+}
+
+export function inMusicBlock(state: EditorState, pos: number): boolean {
+	return lineInMusic(state, pos);
 }
 
 function lineInMusic(state: EditorState, pos: number): boolean {
@@ -131,8 +135,9 @@ const gridInput = EditorState.transactionFilter.of((tr) => {
 	};
 });
 
-const gridKeys = Prec.highest(
+const gridKeys = (extra: KeyBinding[]) => Prec.highest(
 	keymap.of([
+		...extra,
 		{ key: "Insert", run: runToggleInsert },
 		{ key: "Help", run: runToggleInsert }, // macOS name for a PC keyboard's Insert
 		// Shift+Space: open a one-char gap in grid/H:/L: content -- insert the row's
@@ -255,6 +260,6 @@ const gridKeys = Prec.highest(
 	])
 );
 
-export function musicGridExtension(): Extension {
-	return [insertMode, gridInput, gridKeys];
+export function musicGridExtension(extraKeys: KeyBinding[] = []): Extension {
+	return [insertMode, gridInput, gridKeys(extraKeys)];
 }

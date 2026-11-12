@@ -17,7 +17,8 @@ import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML, stripTieContAccids, TIE_CONT_PREFIX } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
 import { ScreenWake } from "./screen-wake";
-import { addBarOrSystem, addContinuation, insertColumn, removeColumn, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
+import { Edit, Pos } from "./editor/grid-ops";
+import { GRID_COMMANDS, HELP_KEY, ShortcutsModal, gridCommandKeys, keyLabel } from "./editor/shortcuts";
 
 interface MusicNotationSettings {
 	/** Verovio render scale (percent). 40 is a sensible default for notes. */
@@ -138,9 +139,12 @@ export default class MusicNotationPlugin extends Plugin {
 			(source, el, ctx) => this.renderBlock(source, el, ctx, false)
 		);
 		// Editing helpers for `music` blocks (overtype grids, plain Enter, etc.).
-		this.registerEditorExtension(musicGridExtension());
+		this.registerEditorExtension(
+			musicGridExtension(gridCommandKeys((msg) => new Notice(msg), () => new ShortcutsModal(this.app).open()))
+		);
 
-		// Commands that scaffold/tidy the ASCII grid.
+		// Commands that scaffold/tidy the ASCII grid. Each also has an in-block
+		// shortcut (see editor/shortcuts.ts); "Show shortcuts" lists them all.
 		const apply = (editor: Editor, fn: (lines: string[], pos: Pos) => Edit | null, fail: string) => {
 			const lines = editor.getValue().split("\n");
 			const cur = editor.getCursor();
@@ -156,35 +160,18 @@ export default class MusicNotationPlugin extends Plugin {
 			);
 			editor.setCursor(e.cursor);
 		};
+		for (const cmd of GRID_COMMANDS) {
+			this.addCommand({
+				id: cmd.id,
+				name: `${cmd.name} (${keyLabel(cmd.key)} in block)`,
+				editorCallback: (editor) => apply(editor, cmd.fn, cmd.fail),
+			});
+		}
+		const showHelp = () => new ShortcutsModal(this.app).open();
 		this.addCommand({
-			id: "music-add-bar",
-			name: "Add bar (or new stave on a blank line)",
-			editorCallback: (editor) => apply(editor, addBarOrSystem, "Place the cursor in a music block first"),
-		});
-		this.addCommand({
-			id: "music-remove-bar",
-			name: "Remove bar at cursor",
-			editorCallback: (editor) => apply(editor, removeBar, "Place the cursor in a music grid bar first"),
-		});
-		this.addCommand({
-			id: "music-add-continuation",
-			name: "Continue staves on a new line (===)",
-			editorCallback: (editor) => apply(editor, addContinuation, "Place the cursor in a music staff first"),
-		});
-		this.addCommand({
-			id: "music-insert-column",
-			name: "Insert padding column (whole stave)",
-			editorCallback: (editor) => apply(editor, insertColumn, "Place the cursor in a music staff first"),
-		});
-		this.addCommand({
-			id: "music-remove-column",
-			name: "Remove padding column (whole stave)",
-			editorCallback: (editor) => apply(editor, removeColumn, "Cursor must be on a blank padding column"),
-		});
-		this.addCommand({
-			id: "music-format",
-			name: "Format (align barlines)",
-			editorCallback: (editor) => apply(editor, formatBlock, "Place the cursor in a music block first"),
+			id: "music-show-shortcuts",
+			name: `Show shortcuts (${keyLabel(HELP_KEY)} in block)`,
+			callback: showHelp,
 		});
 	}
 
