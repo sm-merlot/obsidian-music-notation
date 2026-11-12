@@ -11,6 +11,16 @@ import {
 	harmonyXml,
 } from "./tab-to-musicxml.js";
 
+export const TIE_CONT_PREFIX = "tiecont-";
+
+// MEI (Verovio's own export of the loaded MusicXML) -> same MEI with the written
+// accidental removed from tagged tie continuations. The tie is already resolved
+// by then and `accid.ges` keeps the sounding pitch, so only the glyph goes.
+export function stripTieContAccids(mei) {
+	const re = new RegExp(`<note\\b[^>]*xml:id="${TIE_CONT_PREFIX}[^"]*"[^>]*>[\\s\\S]*?</note>`, "g");
+	return mei.replace(re, (note) => note.replace(/(<accid\b[^>]*?)\saccid="[^"]*"/g, "$1"));
+}
+
 function clefXml(type, number) {
 	const num = number ? ` number="${number}"` : "";
 	switch (type) {
@@ -34,19 +44,32 @@ function noteXml(e, n, i, ctx) {
 		return `<note><rest/><duration>${div}</duration>${voice}<type>${type}</type>${dotsXml(dots)}${staffTag}</note>`;
 	}
 	const alter = n.alter ? `<alter>${n.alter}</alter>` : "";
-	const accName = n.acc === 1 ? "sharp" : n.acc === -1 ? "flat" : n.acc === 0 ? "natural" : "";
+	// a tied continuation of a note with a typed accidental (#, b, n) repeats the
+	// accidental: Verovio only closes a tie whose two ends carry the same written
+	// accidental. It's tagged with a `tiecont-` id so the renderer can drop the
+	// (musically wrong) repeated glyph afterwards — see stripTieContAccids.
+	const contAcc = n.tieStop && n.acc == null && n.srcAcc != null ? n.srcAcc : null;
+	const shownAcc = n.acc != null ? n.acc : contAcc;
+	const accName = shownAcc === 1 ? "sharp" : shownAcc === -1 ? "flat" : shownAcc === 0 ? "natural" : "";
 	const accidental = accName ? `<accidental>${accName}</accidental>` : "";
+	const idAttr = contAcc != null ? ` id="${TIE_CONT_PREFIX}${++ctx.ids.n}"` : "";
+	// ties across a barline: <tie> (sound) after <duration>, <tied> (visual) in
+	// <notations> — per note, so each chord member ties independently.
+	const tie = (n.tieStop ? '<tie type="stop"/>' : "") + (n.tieStart ? '<tie type="start"/>' : "");
+	const tied = (n.tieStop ? '<tied type="stop"/>' : "") + (n.tieStart ? '<tied type="start"/>' : "");
+	const notInner = tied + (i === 0 ? tupletNot : "");
+	const notations = notInner ? `<notations>${notInner}</notations>` : "";
 	return (
-		`<note>${i > 0 ? "<chord/>" : ""}` +
+		`<note${idAttr}>${i > 0 ? "<chord/>" : ""}` +
 		`<pitch><step>${n.step}</step>${alter}<octave>${n.octave}</octave></pitch>` +
-		`<duration>${div}</duration>${voice}<type>${type}</type>${dotsXml(dots)}${accidental}${timeMod}` +
-		`${i === 0 ? beam : ""}${i === 0 ? staffTag : ""}${i === 0 ? tupletNot : ""}${i === 0 ? lyric : ""}</note>`
+		`<duration>${div}</duration>${tie}${voice}<type>${type}</type>${dotsXml(dots)}${accidental}${timeMod}` +
+		`${i === 0 ? staffTag : ""}${i === 0 ? beam : ""}${notations}${i === 0 ? lyric : ""}</note>`
 	);
 }
 
 // Emit one voice (a staff's worth of events) for a measure. `staff` (1/2) tags
 // the notes for a multi-staff part; pass null for a single-staff part.
-function voiceXml(events, d, syllab, staff) {
+function voiceXml(events, d, syllab, staff, ids) {
 	const sel = events;
 	const roles = beamRoles(sel, 1 / d.beatType);
 	const voice = staff == null ? `<voice>1</voice>` : `<voice>${staff}</voice>`;
@@ -63,7 +86,7 @@ function voiceXml(events, d, syllab, staff) {
 			type = b.type;
 			dots = b.dots;
 			timeMod = `<time-modification><actual-notes>${e.tuplet.actual}</actual-notes><normal-notes>${e.tuplet.normal}</normal-notes></time-modification>`;
-			if (e.tuplet.pos !== "mid") tupletNot = `<notations><tuplet type="${e.tuplet.pos}" bracket="yes"/></notations>`;
+			if (e.tuplet.pos !== "mid") tupletNot = `<tuplet type="${e.tuplet.pos}" bracket="yes"/>`;
 		}
 		// chords print once (on the top staff / single staff)
 		if (e.chord && staff !== 2) body += harmonyXml(e.chord);
@@ -73,7 +96,7 @@ function voiceXml(events, d, syllab, staff) {
 			const s = syllab(e.syllables.join(" "));
 			lyric = `<lyric><syllabic>${s.syllabic}</syllabic><text>${esc(s.text)}</text></lyric>`;
 		}
-		const ctx = { div: dp.div, type, dots, timeMod, beam, lyric, tupletNot, staffTag, voice };
+		const ctx = { div: dp.div, type, dots, timeMod, beam, lyric, tupletNot, staffTag, voice, ids };
 		if (e.rest || !e.notes.length) {
 			body += noteXml(e, null, 0, ctx);
 			return;
@@ -83,7 +106,7 @@ function voiceXml(events, d, syllab, staff) {
 	return body;
 }
 
-function partXml(part, d, syllab) {
+function partXml(part, d, syllab, ids) {
 	const grand = part.clefType === "grand";
 	const measureDiv = Math.round((d.beats / d.beatType) * 4 * DIV); // full-measure divisions
 	const attributes =
@@ -100,21 +123,22 @@ function partXml(part, d, syllab) {
 		let out = "";
 		for (let mi = 0; mi < n; mi++) {
 			const body =
-				voiceXml((tb[mi] || empty).events, d, syllab, 1) +
+				voiceXml((tb[mi] || empty).events, d, syllab, 1, ids) +
 				`<backup><duration>${measureDiv}</duration></backup>` +
-				voiceXml((bb[mi] || empty).events, d, syllab, 2);
+				voiceXml((bb[mi] || empty).events, d, syllab, 2, ids);
 			out += `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${body}</measure>`;
 		}
 		return out;
 	}
 	return part.bars
-		.map((bar, mi) => `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${voiceXml(bar.events, d, syllab, null)}</measure>`)
+		.map((bar, mi) => `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${voiceXml(bar.events, d, syllab, null, ids)}</measure>`)
 		.join("");
 }
 
 export function notationToMusicXML(model) {
 	const d = model.directives;
 	const syllab = makeSyllabifier();
+	const tieIds = { n: 0 };
 	const parts = model.parts && model.parts.length ? model.parts : [{ clefType: d.clef, bars: (model.systems || []).flatMap((s) => s.bars) }];
 
 	const ids = parts.map((_, i) => `P${i + 1}`);
@@ -125,7 +149,7 @@ export function notationToMusicXML(model) {
 		parts.map((_, i) => `<score-part id="${ids[i]}"><part-name></part-name></score-part>`).join("") +
 		(group ? `<part-group type="stop" number="1"/>` : "") +
 		`</part-list>`;
-	const body = parts.map((p, i) => `<part id="${ids[i]}">${partXml(p, d, syllab)}</part>`).join("");
+	const body = parts.map((p, i) => `<part id="${ids[i]}">${partXml(p, d, syllab, tieIds)}</part>`).join("");
 
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

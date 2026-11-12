@@ -94,6 +94,32 @@ x   |
 ````
 (a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
 
+**Ties across barlines** — keep the `_` run going straight through the `|` and the note
+is held into the next bar: it's split at the barline into two notes joined by a tie.
+Works across several barlines (`x___|____|__`) and for chords (several rows starting in
+the same column, each held past the `|`). A typed accidental (`#`/`b`/`n`) isn't
+repeated on the tied note. A `_` that stops at the `|` still ends the note there.
+
+````markdown
+```music
+mode: notation
+clef: treble
+unit: 1/4
+
+----|----|----
+    |    |
+----|----|----
+    |    |
+----|----|----
+x__ |    |
+----|----|----
+   x|____|__x_
+----|----|----
+```
+````
+(A4 for 3 beats, then F4 on beat 4 held through all of bar 2 and the first two beats of
+bar 3 — two ties — then a fresh F4.)
+
 **Triplets / tuplets** — bracket a group with `n( … )` (bare `(` = a triplet). Triplet
 notes can't land on exact power-of-two columns, so the bracket **quantises** the notes
 inside to even tuplet slots: its **interior width = the played length** of the group,

@@ -2,7 +2,8 @@
 // the 5 staff lines, blank rows between/around are spaces; each text row is one
 // diatonic step. Pitch = vertical position (anchored by clef). A note is `x`
 // (natural per key), `#` (sharp), `b` (flat) or `n` (natural) at its row+column;
-// `_` sustains the previous note (duration). `|` = barline. Reuses tab's column
+// `_` sustains the previous note (duration); a `_` run carried straight past `|`
+// ties the note into the next bar. `|` = barline. Reuses tab's column
 // = time-unit idea, but durations are EXPLICIT (onset + trailing `_`).
 
 const LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
@@ -183,15 +184,22 @@ function resolveStaff(sys, dir, clefType) {
 		for (let c = 0; c < r.length; c++) {
 			const ch = r[c];
 			if (!NOTE_CHARS.includes(ch)) continue;
-			// duration = onset + trailing '_'
-			let span = 1;
-			while (r[c + span] === "_") span++;
+			// duration = onset + trailing '_'. A `_` run may continue straight past a
+			// barline (`x___|__`): the note is held into the next bar(s) and later
+			// split at each `|` into tied notes. `end` = exclusive char column.
+			let k = c + 1;
+			for (;;) {
+				if (r[k] === "_") k++;
+				else if (r[k] === "|" && r[k + 1] === "_") k++;
+				else break;
+			}
+			const span = k - c;
 			const override = ch === "#" ? 1 : ch === "b" ? -1 : ch === "n" ? 0 : null;
 			const alter = override === null ? keyAlter(p.letter, dir.fifths) : override;
 			if (!onsetsByCol.has(c)) onsetsByCol.set(c, []);
 			// `acc` = the accidental the user typed (#, b, n) so it's drawn explicitly
 			// — e.g. `n` neutralises a key-signature sharp/flat with a ♮.
-			onsetsByCol.get(c).push({ step: p.letter, alter, octave: p.octave, span, acc: override });
+			onsetsByCol.get(c).push({ step: p.letter, alter, octave: p.octave, span, end: k, acc: override });
 			noteCols.add(c);
 			c += span - 1;
 		}
@@ -260,7 +268,17 @@ function resolveStaff(sys, dir, clefType) {
 	const bars = segs
 		.filter(([s, e]) => e > s)
 		.map(([s, e]) => {
-			const cols = [...onsetsByCol.keys()].filter((c) => c >= s && c < e).sort((a, b) => a - b);
+			// notes held from an earlier bar (sustain ran past a `|`) re-enter at this
+			// bar's first column as tied continuations: tie-stop here, tie-start again
+			// if they're held past this bar's end too.
+			const colNotes = new Map();
+			for (const [c, ns] of onsetsByCol) if (c >= s && c < e) colNotes.set(c, ns);
+			const carry = [];
+			for (const [c, ns] of onsetsByCol)
+				if (c < s) for (const n of ns) if (n.end > s) carry.push({ ...n, acc: null, srcAcc: n.acc, tieStop: true });
+			if (carry.length) colNotes.set(s, carry.concat(colNotes.get(s) || []));
+			for (const ns of colNotes.values()) for (const n of ns) n.tieStart = n.end > e;
+			const cols = [...colNotes.keys()].sort((a, b) => a - b);
 			const events = [];
 			let cursor = s;
 			let i = 0;
@@ -283,7 +301,7 @@ function resolveStaff(sys, dir, clefType) {
 						events.push({
 							col: mc,
 							durFrac: total / n,
-							notes: onsetsByCol.get(mc),
+							notes: colNotes.get(mc),
 							tuplet: { actual, normal, pos: k === 0 ? "start" : k === n - 1 ? "stop" : "mid" },
 						});
 					});
@@ -291,10 +309,10 @@ function resolveStaff(sys, dir, clefType) {
 					continue;
 				}
 				if (c > cursor) events.push({ col: cursor, rest: true, durFrac: dur(cursor, c), notes: [] });
-				const notes = onsetsByCol.get(c);
-				const span = Math.max(...notes.map((n) => n.span));
-				events.push({ col: c, durFrac: dur(c, c + span), notes });
-				cursor = c + span;
+				const notes = colNotes.get(c);
+				const end = Math.min(e, Math.max(...notes.map((n) => n.end)));
+				events.push({ col: c, durFrac: dur(c, end), notes });
+				cursor = end;
 				i++;
 			}
 			if (cursor < e) events.push({ col: cursor, rest: true, durFrac: dur(cursor, e), notes: [] });
