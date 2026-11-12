@@ -19,7 +19,7 @@ export interface GridCommand {
 export const GRID_COMMANDS: GridCommand[] = [
 	{ id: "music-add-bar", name: "Add bar (or new stave on a blank line)", key: "Mod-Alt-b", fn: addBarOrSystem, fail: "Place the cursor in a music block first" },
 	{ id: "music-remove-bar", name: "Remove bar at cursor", key: "Mod-Alt-Shift-b", fn: removeBar, fail: "Place the cursor in a music grid bar first" },
-	{ id: "music-add-continuation", name: "Continue staves on a new line (===)", key: "Mod-Alt-Enter", fn: addContinuation, fail: "Place the cursor in a music staff first" },
+	{ id: "music-add-continuation", name: "Continue staves on a new line (===)", key: "Mod-Alt-n", fn: addContinuation, fail: "Place the cursor in a music staff first" },
 	{ id: "music-insert-column", name: "Insert padding column (whole stave)", key: "Mod-Alt-c", fn: insertColumn, fail: "Place the cursor in a music staff first" },
 	{ id: "music-remove-column", name: "Remove padding column (whole stave)", key: "Mod-Alt-Shift-c", fn: removeColumn, fail: "Cursor must be on a blank padding column" },
 	{ id: "music-format", name: "Format (align barlines)", key: "Mod-Alt-a", fn: formatBlock, fail: "Place the cursor in a music block first" },
