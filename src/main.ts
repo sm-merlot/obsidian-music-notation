@@ -14,7 +14,7 @@ import { tabSrcToSections, stripNotationStaff } from "./dsl/pipeline.js";
 import { parseChords, chordParts } from "./dsl/chords.js";
 import { parseChordDefs, chordLayout } from "./dsl/chord-defs.js";
 import { parseNotation } from "./dsl/parse-notation.js";
-import { notationToMusicXML } from "./dsl/notation-to-musicxml.js";
+import { notationToMusicXML, stripTieContAccids, TIE_CONT_PREFIX } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
 import { ScreenWake } from "./screen-wake";
 import { addBarOrSystem, addContinuation, insertColumn, removeColumn, removeBar, formatBlock, Edit, Pos } from "./editor/grid-ops";
@@ -399,6 +399,16 @@ export default class MusicNotationPlugin extends Plugin {
 		});
 		if (!tk.loadData(data) || tk.getPageCount() < 1) {
 			throw new Error(tk.getLog() || "Verovio could not parse this input.");
+		}
+		// Notation ties from a note with a typed accidental: the continuation had to
+		// repeat the accidental for Verovio to close the tie. Round-trip through MEI
+		// to drop that glyph (transpose is already baked into the MEI).
+		if (inputFrom === "musicxml" && data.includes(`id="${TIE_CONT_PREFIX}`)) {
+			const mei = stripTieContAccids(tk.getMEI());
+			tk.setOptions({ inputFrom: "mei", transpose: "" });
+			if (!tk.loadData(mei) || tk.getPageCount() < 1) {
+				throw new Error(tk.getLog() || "Verovio could not parse this input.");
+			}
 		}
 		const svgEl = new DOMParser().parseFromString(
 			tk.renderToSVG(1),
