@@ -191,7 +191,7 @@ export function tabToMusicXML(model) {
 			});
 		});
 		const backupXml = `<backup><duration>${backup}</duration></backup>`;
-		return `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${v1}${backupXml}${v2}</measure>`;
+		return `<measure number="${mi + 1}"${mi === 0 && bar.timeFrac < d.beats / d.beatType - 1e-9 ? ' implicit="yes"' : ""}>${mi === 0 ? attributes : ""}${v1}${backupXml}${v2}</measure>`;
 	});
 
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>

@@ -106,6 +106,11 @@ function voiceXml(events, d, syllab, staff, ids) {
 	return body;
 }
 
+// A first bar shorter than the time signature is a pick-up: mark it implicit so
+// bar grouping (bar-groups.js) doesn't count it.
+const barFrac = (bar) => (bar ? bar.events.reduce((t, e) => t + (e.durFrac || 0), 0) : 0);
+const implicitAttr = (mi, bar, d) => (mi === 0 && bar && barFrac(bar) < d.beats / d.beatType - 1e-9 ? ' implicit="yes"' : "");
+
 function partXml(part, d, syllab, ids) {
 	const grand = part.clefType === "grand";
 	const measureDiv = Math.round((d.beats / d.beatType) * 4 * DIV); // full-measure divisions
@@ -126,12 +131,12 @@ function partXml(part, d, syllab, ids) {
 				voiceXml((tb[mi] || empty).events, d, syllab, 1, ids) +
 				`<backup><duration>${measureDiv}</duration></backup>` +
 				voiceXml((bb[mi] || empty).events, d, syllab, 2, ids);
-			out += `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${body}</measure>`;
+			out += `<measure number="${mi + 1}"${implicitAttr(mi, tb[mi], d)}>${mi === 0 ? attributes : ""}${body}</measure>`;
 		}
 		return out;
 	}
 	return part.bars
-		.map((bar, mi) => `<measure number="${mi + 1}">${mi === 0 ? attributes : ""}${voiceXml(bar.events, d, syllab, null, ids)}</measure>`)
+		.map((bar, mi) => `<measure number="${mi + 1}"${implicitAttr(mi, bar, d)}>${mi === 0 ? attributes : ""}${voiceXml(bar.events, d, syllab, null, ids)}</measure>`)
 		.join("");
 }
 

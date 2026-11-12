@@ -17,6 +17,7 @@ import { parseNotation } from "./dsl/parse-notation.js";
 import { notationToMusicXML, stripTieContAccids, TIE_CONT_PREFIX } from "./dsl/notation-to-musicxml.js";
 import { musicGridExtension } from "./editor/grid-edit";
 import { ScreenWake } from "./screen-wake";
+import { parseBarGroups, barsDirective, hasPickup, applyBarGroups, minBarsPerLine, chooseGroup } from "./dsl/bar-groups.js";
 import { Edit, Pos } from "./editor/grid-ops";
 import { GRID_COMMANDS, HELP_KEY, ShortcutsModal, gridCommandKeys, keyLabel } from "./editor/shortcuts";
 
@@ -28,11 +29,14 @@ interface MusicNotationSettings {
 	 * more breathing room between notes/lyrics, fewer measures per line.
 	 */
 	spacing: number;
+	/** Default bar grouping for blocks without a `bars:` line (e.g. "4/8", "auto"). */
+	bars: string;
 }
 
 const DEFAULT_SETTINGS: MusicNotationSettings = {
 	scale: 40,
 	spacing: 110,
+	bars: "4/8",
 };
 
 type InputFormat = "musicxml" | "abc";
@@ -196,7 +200,7 @@ export default class MusicNotationPlugin extends Plugin {
 		// tab is handled separately (per-section) in renderBlock.
 		if (mode === "notation") {
 			const body = source
-				.replace(/^\s*(mode|title|meter|unit|tuning|capo)\s*:.*$/gim, "")
+				.replace(/^\s*(mode|title|meter|unit|tuning|capo|bars)\s*:.*$/gim, "")
 				.trim();
 			return { inputFrom: detectFormat(body), data: body, strip: false };
 		}
@@ -253,6 +257,7 @@ export default class MusicNotationPlugin extends Plugin {
 		const render = () => {
 			try {
 				const px = this.fitWidth(container, el);
+				const groups = parseBarGroups(barsDirective(source) ?? this.settings.bars);
 				target.empty();
 				if (dsl) this.drawChordChart(source, target);
 				if (dsl && dslMode(source) === "chords") {
@@ -273,14 +278,14 @@ export default class MusicNotationPlugin extends Plugin {
 							});
 						}
 						target.appendChild(
-							this.renderSvg(tk, sec.xml, "musicxml", px, true, sec.connections)
+							this.renderSvg(tk, sec.xml, "musicxml", px, true, sec.connections, 0, groups)
 						);
 					}
 				} else if (dsl && dslMode(source) === "notation") {
 					const model = parseNotation(source);
 					const xml = notationToMusicXML(model);
 					const semis = transposeOverride ?? transposeSemis(model.directives.transpose);
-					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false, undefined, semis));
+					target.appendChild(this.renderSvg(tk, xml, "musicxml", px, false, undefined, semis, groups));
 				} else {
 					const { inputFrom, data, strip } = this.prepare(source, dsl);
 					target.appendChild(this.renderSvg(tk, data, inputFrom, px, strip));
@@ -354,7 +359,8 @@ export default class MusicNotationPlugin extends Plugin {
 		px: number,
 		strip: boolean,
 		connections?: unknown,
-		transpose = 0
+		transpose = 0,
+		groups: number[] = []
 	): SVGElement {
 		const f = this.settings.spacing / 100;
 		tk.setOptions({
@@ -387,12 +393,25 @@ export default class MusicNotationPlugin extends Plugin {
 		if (!tk.loadData(data) || tk.getPageCount() < 1) {
 			throw new Error(tk.getLog() || "Verovio could not parse this input.");
 		}
+		// Bar grouping: see how many bars auto-wrap fits per line at this width,
+		// then force breaks every N bars (largest N that fits; else stay auto).
+		if (inputFrom === "musicxml" && groups.length) {
+			const pickup = hasPickup(data);
+			const size = chooseGroup(groups, minBarsPerLine(tk.renderToSVG(1), pickup));
+			if (size) {
+				data = applyBarGroups(data, size, pickup);
+				tk.setOptions({ breaks: "encoded" });
+				if (!tk.loadData(data) || tk.getPageCount() < 1) {
+					throw new Error(tk.getLog() || "Verovio could not parse this input.");
+				}
+			}
+		}
 		// Notation ties from a note with a typed accidental: the continuation had to
 		// repeat the accidental for Verovio to close the tie. Round-trip through MEI
 		// to drop that glyph (transpose is already baked into the MEI).
 		if (inputFrom === "musicxml" && data.includes(`id="${TIE_CONT_PREFIX}`)) {
 			const mei = stripTieContAccids(tk.getMEI());
-			tk.setOptions({ inputFrom: "mei", transpose: "" });
+			tk.setOptions({ inputFrom: "mei", transpose: "" }); // keeps breaks mode
 			if (!tk.loadData(mei) || tk.getPageCount() < 1) {
 				throw new Error(tk.getLog() || "Verovio could not parse this input.");
 			}
@@ -571,6 +590,21 @@ class MusicNotationSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange(async (v) => {
 						this.plugin.settings.scale = v;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Bar grouping")
+			.setDesc(
+				"Bars per line in rendered music. \"4/8\" = 8 per line when they fit, else 4; \"4\" = always 4; \"auto\" = fill the width. A block's own `bars:` line overrides this. A pick-up bar isn't counted."
+			)
+			.addText((t) =>
+				t
+					.setPlaceholder("4/8")
+					.setValue(this.plugin.settings.bars)
+					.onChange(async (v) => {
+						this.plugin.settings.bars = v.trim() || "auto";
 						await this.plugin.saveSettings();
 					})
 			);

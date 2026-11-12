@@ -27,7 +27,7 @@ export function parseDirectives(lines) {
 	// capo is free text (e.g. "2", "none", "my 2 / orig 4") — kept raw.
 	const d = { mode: "tab", meter: "4/4", unit: "1/8", tuning: null, capo: "" };
 	for (const l of lines) {
-		const m = l.match(/^\s*(mode|meter|unit|tuning|capo|title)\s*:\s*(.+?)\s*$/);
+		const m = l.match(/^\s*(mode|meter|unit|tuning|capo|title|bars)\s*:\s*(.+?)\s*$/);
 		if (m) d[m[1]] = m[2];
 	}
 	const [beats, beatType] = d.meter.split("/").map(Number);
@@ -157,7 +157,7 @@ export function parseTab(src) {
 	const rest = [];
 	let inHeader = true;
 	for (const l of allLines) {
-		if (inHeader && /^\s*(mode|meter|unit|tuning|capo|title)\s*:/.test(l)) {
+		if (inHeader && /^\s*(mode|meter|unit|tuning|capo|title|bars)\s*:/.test(l)) {
 			directiveLines.push(l);
 			continue;
 		}
@@ -271,7 +271,7 @@ export function parseTab(src) {
 				allEvents.push(e);
 			}
 			cumOffset += colsPerBar + 1; // +1 for the '|' barline char
-			bars.push({ events, colsPerBar });
+			bars.push({ events, colsPerBar, timeFrac: barTimeLen * dir.unitFrac });
 		}
 		// Map aligned lyric/chord rows to events by absolute character column
 		// across the whole system (rows need no '|' — type them above, aligned).

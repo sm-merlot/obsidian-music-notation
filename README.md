@@ -158,6 +158,14 @@ A **Transpose dropdown** also sits above every chords/notation sheet — pick a 
 there to re-render the view on the fly (it starts at the block's `transpose:` and
 doesn't change the note).
 
+**Bar grouping (tab + notation)** — rendered music breaks lines in phrase-sized
+groups instead of however many bars happen to fit. `bars: 4/8` (the default, set in
+plugin settings) puts 8 bars per line when 8 fit at the current width, else 4;
+`bars: 4` always 4; any numbers work (`bars: 3/6`); `bars: auto` fills the width.
+If the width can't fit even the smaller group, it falls back to auto. A pick-up bar
+(a first bar shorter than the time signature) isn't counted, and each tab section
+starts on a new line.
+
 **Multi-staff (piano, SATB, etc.)** — `clef:` takes a list, one entry per staff
 top→bottom: `treble`, `bass`, `treble-8ve` (sounds 8vb), `tenor`, `grand`. A **double
 blank line** separates independent staves (they're bracketed and share barlines); a
