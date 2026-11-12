@@ -58,7 +58,7 @@ export function applyToView(view: EditorView, cmd: GridCommand, notice: (msg: st
 	let anchor = from;
 	for (let i = 0; i < e.cursor.line - e.start && i < out.length; i++) anchor += out[i].length + 1;
 	anchor += Math.min(e.cursor.ch, out[e.cursor.line - e.start]?.length ?? 0);
-	view.dispatch({ changes: { from, to, insert }, selection: { anchor }, scrollIntoView: true, userEvent: "input" });
+	view.dispatch({ changes: { from, to, insert }, selection: { anchor }, scrollIntoView: true, userEvent: "music.grid" });
 	return true;
 }
 

@@ -154,7 +154,7 @@ const gridKeys = (extra: KeyBinding[]) => Prec.highest(
 				const line = state.doc.lineAt(pos);
 				const os = contentStart(line.text);
 				if (os < 0 || pos - line.from < os) return false;
-				view.dispatch(state.update({ changes: { from: pos, insert: fillFor(line.text) }, selection: { anchor: pos }, scrollIntoView: true, userEvent: "input" }));
+				view.dispatch(state.update({ changes: { from: pos, insert: fillFor(line.text) }, selection: { anchor: pos }, scrollIntoView: true, userEvent: "music.gap" }));
 				return true;
 			},
 		},
