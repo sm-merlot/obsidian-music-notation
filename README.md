@@ -144,6 +144,11 @@ unit: 1/16
 (three pitches snapped to an eighth-note triplet; widen the bracket to 8 for a crotchet
 triplet.)
 
+**Tie into a tuplet** — carry a held note's `_` run straight through the count and `(`
+and the note is tied into the tuplet's first slot: `x___3(_xx_)` is a held note tied into
+triplet note 1, then triplet notes 2 and 3. The same works when the bracket sits on its
+own row (just keep the `_` run going into the bracket's columns), and after a barline tie.
+
 The count is generic: `5( … )` is a quintuplet (5 in the time of 4), `6(…)`, `7(…)` etc.
 all work — pick a `unit:` fine enough to draw that many noteheads in the span.
 

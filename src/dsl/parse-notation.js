@@ -191,7 +191,14 @@ function resolveStaff(sys, dir, clefType) {
 			for (;;) {
 				if (r[k] === "_") k++;
 				else if (r[k] === "|" && r[k + 1] === "_") k++;
-				else break;
+				else {
+					// ...or straight into a tuplet bracket on the same row
+					// (`x___3(_xx)`): skip the count + `(`; the note is later split
+					// at the bracket and tied into the tuplet's first slot.
+					const m = /^\d*\(_/.exec(r.slice(k));
+					if (m && r.indexOf(")", k) !== -1) k += m[0].length - 1;
+					else break;
+				}
 			}
 			const span = k - c;
 			const override = ch === "#" ? 1 : ch === "b" ? -1 : ch === "n" ? 0 : null;
@@ -230,6 +237,28 @@ function resolveStaff(sys, dir, clefType) {
 		}
 	});
 	const spanOf = (col) => tupletSpans.find((sp) => col > sp.open && col < sp.close) || null;
+
+	// A note held INTO a tuplet bracket (its `_` run reaches inside the parens,
+	// e.g. `x_____3(_xx)`) is split like a barline tie: the part before the
+	// bracket ends at the count/`(` with a tie-start, and a tied continuation
+	// becomes the tuplet's first member at the bracket's first interior column.
+	for (const sp of tupletSpans) {
+		const first = sp.open + 1;
+		const conts = [];
+		for (const [c, ns] of onsetsByCol) {
+			if (c >= sp.start) continue;
+			for (const n of ns) {
+				if (n.end <= first) continue;
+				conts.push({ ...n, acc: null, srcAcc: n.acc, tieStop: true, end: Math.min(n.end, sp.close) });
+				n.end = sp.start;
+				n.tieOut = true;
+			}
+		}
+		if (conts.length) {
+			onsetsByCol.set(first, conts.concat(onsetsByCol.get(first) || []));
+			noteCols.add(first);
+		}
+	}
 
 	// build events per bar (a column with onsets = a chord; rest fills gaps)
 	// An opening barline (a leading `|` with no onsets to its left) sets a shared
@@ -277,7 +306,7 @@ function resolveStaff(sys, dir, clefType) {
 			for (const [c, ns] of onsetsByCol)
 				if (c < s) for (const n of ns) if (n.end > s) carry.push({ ...n, acc: null, srcAcc: n.acc, tieStop: true });
 			if (carry.length) colNotes.set(s, carry.concat(colNotes.get(s) || []));
-			for (const ns of colNotes.values()) for (const n of ns) n.tieStart = n.end > e;
+			for (const ns of colNotes.values()) for (const n of ns) n.tieStart = n.end > e || !!n.tieOut;
 			const cols = [...colNotes.keys()].sort((a, b) => a - b);
 			const events = [];
 			let cursor = s;

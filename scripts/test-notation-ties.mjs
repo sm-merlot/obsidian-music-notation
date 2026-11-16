@@ -65,6 +65,45 @@ unit: 1/4
 `);
 expect("opening barline + tie", open.got, ["r0.5 F4>:0.5", "F4<:0.25 r0.75"]);
 
+// 5) a note held INTO a tuplet: `_` run carries through `3(`, the first triplet
+// slot is a tied continuation. unit 1/8, 4/4: bar = 8 cols; interior 4 = minim
+// -> crotchet triplet. Middle staff line row = B4.
+const tupStaff = (row, bracketRow = null) => `mode: notation
+clef: treble
+unit: 1/8
+${bracketRow ? "\n" + bracketRow : ""}
+-----------|
+           |
+-----------|
+           |
+${row}
+           |
+-----------|
+           |
+-----------|
+`;
+const third = 1 / 6;
+const tsig = (ev) => (ev.tuplet ? "t" : "") + sig(ev);
+const runT = (src) => parseNotation(src).parts[0].bars.map((b) => b.events.map(tsig).join(" "));
+const tieTup = parseNotation(tupStaff("x___3(_xx_)|"));
+expect("held note tied into triplet (same row)", runT(tupStaff("x___3(_xx_)|")), [`B4>:0.5 tB4<:${third} tB4:${third} tB4:${third}`]);
+expect("bracket on its own row", runT(tupStaff("x______xx_-|", "    3(    )")), [`B4>:0.5 tB4<:${third} tB4:${third} tB4:${third}`]);
+expect("plain triplet unchanged", runT(tupStaff("x___3(xx_x)|")), [`B4:0.5 tB4:${third} tB4:${third} tB4:${third}`]);
+expect("barline tie then into triplet", runT(`mode: notation
+clef: treble
+unit: 1/8
+
+--------|---------|
+        |         |
+--------|---------|
+        |         |
+------x_|__3(_xx_)|
+        |         |
+--------|---------|
+        |         |
+--------|---------|
+`), ["r0.75 B4>:0.25", `B4<>:0.25 tB4<:${third} tB4:${third} tB4:${third}`]);
+
 const xmlOf = (m) => notationToMusicXML(m);
 const count = (x, re) => (x.match(re) || []).length;
 for (const [name, m, n] of [["chord", chord.model, 2], ["multi", multi.model, 2]]) {
@@ -92,6 +131,11 @@ const render = (xml) => {
 	const mei = ok ? tk.getMEI() : "";
 	return { ok, mei, svg: ok ? tk.renderToSVG(1) : "" };
 };
+{
+	const { ok, mei, svg } = render(xmlOf(tieTup));
+	const open = count(mei, /<tie [^>]*\/>/g) - count(mei, /<tie [^>]*endid=/g);
+	check("tie into triplet: Verovio draws 1 closed tie + 1 tuplet", ok && count(svg, /class="tie"/g) === 1 && open === 0 && count(svg, /class="tuplet"/g) === 1, `ties=${count(svg, /class="tie"/g)} open=${open}`);
+}
 const sharpKey = run(staff("    |    |    ", "#___|____|_   ", "    |    |    "));
 for (const [name, m, n, sharps] of [["chord", chord.model, 2, 1], ["multi", multi.model, 2, 0], ["sharp over 2 barlines", sharpKey.model, 2, 1]]) {
 	const { ok, mei, svg } = render(xmlOf(m));
