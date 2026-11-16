@@ -250,7 +250,20 @@ export function addContinuation(lines: string[], pos: Pos): Edit | null {
 	while (e >= s && rows[e].trim() === "") e--;
 	rows = rows.slice(s, e + 1);
 	if (!rows.length) return null;
-	const clone = rows.map(blankRow);
+	// each bar comes back at the standard meter/unit width: copying the previous
+	// line's widths would turn its padding columns (zero-time spaces) into fill
+	// that DOES take time, and a short pickup bar would be repeated.
+	const w = unitsPerBar(directives(lines, b));
+	let clone = rows.map((t) => blankRow(t, w));
+	// rows with no barline (H:/L:, ledger rows) can't be rebuilt per bar: make them
+	// blank space as wide as the new staff
+	const R = Math.max(0, ...clone.filter((t, k) => rows[k].includes("|")).map((t) => t.length));
+	clone = clone.map((t, k) => {
+		if (rows[k].includes("|") || t === "") return t;
+		const hl = rows[k].match(/^\s*[HhLl]\s*:\s?/);
+		const keep = hl ? hl[0] : "";
+		return keep + " ".repeat(Math.max(0, (R || rows[k].length) - keep.length));
+	});
 	const block = ["===", ...clone];
 	const inner = lines.slice(b.start, b.end + 1);
 	const at = bot - b.start + 1;
@@ -407,16 +420,19 @@ export function addSystem(lines: string[], pos: Pos): Edit | null {
 
 /** Empty a row: keep its label/gutter and barlines, replace content with fill.
  *  Handles staff/note rows, H:/L: rows, and blank interior rows. */
-function blankRow(text: string): string {
+function blankRow(text: string, barWidth = 0): string {
 	if (text.trim() === "") return "";
+	// barWidth > 0: every non-empty bar segment is rebuilt at that width
+	const fill = (body: string, f: string) =>
+		barWidth > 0 ? body.split("|").map((seg) => (seg.length ? f.repeat(barWidth) : "")).join("|") : body.replace(/[^|]/g, f);
 	const hl = text.match(/^\s*[HhLl]\s*:\s?/); // H:/L: -> keep label, blank chords/lyrics (space)
-	if (hl) return text.slice(0, hl[0].length) + text.slice(hl[0].length).replace(/[^|]/g, " ");
+	if (hl) return text.slice(0, hl[0].length) + fill(text.slice(hl[0].length), " ");
 	const s = gridStart(text);
 	const f = fillChar(text);
 	// labelled row (tab `e:`) -> keep the label; otherwise keep the leading gutter
 	// (the spaces before an opening `|`) so it isn't turned into dashes.
 	const keep = s > 0 ? s : text.match(/^\s*/)![0].length;
-	return text.slice(0, keep) + text.slice(keep).replace(/[^|]/g, f);
+	return text.slice(0, keep) + fill(text.slice(keep), f);
 }
 
 /** Align every system in the block: pad each row's bars to the per-column max so
