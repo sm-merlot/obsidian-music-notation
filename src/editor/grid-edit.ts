@@ -53,14 +53,14 @@ function lineInMusic(state: EditorState, pos: number): boolean {
 // Column where overtype content begins: after an `H:`/`L:` label, else the grid
 // content start (-1 = not an overtype row).
 function contentStart(text: string): number {
-	const hl = text.match(/^\s*[HhLl]\s*:\s?/);
+	const hl = text.match(/^\s*[HhLlAaDdTt]\s*:\s?/);
 	if (hl) return hl[0].length;
 	return gridStart(text);
 }
 // Fill char for overtype/backspace restore: space on H:/L: (and note) rows, `-` on
 // dash/string rows.
 function fillFor(text: string): string {
-	return /^\s*[HhLl]\s*:/.test(text) ? " " : fillChar(text);
+	return /^\s*[HhLlAaDdTt]\s*:/.test(text) ? " " : fillChar(text);
 }
 
 // Insert mode: per-editor toggle. While on, the overtype filter and the fill-style

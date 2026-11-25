@@ -69,7 +69,12 @@ function syllablesFor(t) {
 // chordRowAbs}], one per staff, top→bottom.
 function splitStaves(body) {
 	const staves = [];
-	const mk = () => ({ rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null });
+	const mk = () => ({
+		rows: [], lyric: null, lyricAbs: null, chordRow: null, chordRowAbs: null,
+		// A: articulations, D: dynamics + hairpins, T: text above the staff;
+		// each may repeat (several A: rows stack), as {rel, abs}
+		artRows: [], dynRows: [], textRows: [],
+	});
 	let cur = mk();
 	const push = () => {
 		while (cur.rows.length && cur.rows[0].trim() === "") cur.rows.shift();
@@ -87,6 +92,9 @@ function splitStaves(body) {
 		const lab = l.match(/^\s*([A-Za-z]+)\s*:\s?(.*)$/);
 		if (lab && /^[Ll]$/.test(lab[1])) { cur.lyric = lab[2]; cur.lyricAbs = blankLabel(l); continue; }
 		if (lab && /^[Hh]$/.test(lab[1])) { cur.chordRow = lab[2]; cur.chordRowAbs = blankLabel(l); continue; }
+		if (lab && /^[Aa]$/.test(lab[1])) { cur.artRows.push({ rel: lab[2], abs: blankLabel(l) }); continue; }
+		if (lab && /^[Dd]$/.test(lab[1])) { cur.dynRows.push({ rel: lab[2], abs: blankLabel(l) }); continue; }
+		if (lab && /^[Tt]$/.test(lab[1])) { cur.textRows.push({ rel: lab[2], abs: blankLabel(l) }); continue; }
 		cur.rows.push(l);
 	}
 	push();
@@ -362,5 +370,70 @@ function resolveStaff(sys, dir, clefType) {
 			return { events };
 		});
 
+	attachMarks(sys, hasOpenBar, bars);
 	return { clefType, bars };
+}
+
+// Articulations and effects (A:), what each A: token can say: symbols may be
+// combined (`>.` = accent + staccato); effects are words.
+const ART_CHARS = { ">": "accent", "^": "strong-accent", ".": "staccato", "-": "tenuto", "'": "staccatissimo", U: "fermata", u: "fermata" };
+const EFFECTS = { fall: "falloff", falloff: "falloff", doit: "doit", scoop: "scoop", plop: "plop", shake: "shake" };
+const DYNAMICS = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz", "sf", "fp", "sfp", "fz", "rfz"]);
+
+// Tokens of a row with their columns: `split` = how a token is delimited.
+function rowTokens(src, re) {
+	const out = [];
+	let m;
+	while ((m = re.exec(src || ""))) out.push({ col: m.index, end: m.index + m[0].length, raw: m[0] });
+	return out;
+}
+
+// A:, D: and T: rows, aligned by column like H:. Marks go on the event at (or
+// nearest to) their column, across all bars at once, so a hairpin can run
+// over a barline (`<---|----`). Each kind of row may repeat, for marks
+// too close together to share one row.
+function attachMarks(sys, abs, bars) {
+	const src = (row) => (abs ? row.abs || "" : row.rel || "");
+	const events = bars.flatMap((b) => b.events).filter((ev) => ev.col != null).sort((a, b) => a.col - b.col);
+	if (!events.length) return;
+	const notes = events.filter((ev) => !ev.rest);
+	const atOrBefore = (list, col) => {
+		let best = null;
+		for (const ev of list) { if (ev.col <= col) best = ev; else break; }
+		return best || list[0] || null;
+	};
+	const nearest = (list, col) =>
+		list.reduce((best, ev) => (best == null || Math.abs(ev.col - col) < Math.abs(best.col - col) ? ev : best), null);
+
+	// A: `>` accent, `^` marcato, `.` staccato, `-` tenuto, `'` staccatissimo,
+	// `U` fermata; words: fall, doit, scoop, plop, shake.
+	for (const row of sys.artRows) for (const t of rowTokens(src(row).replace(/\|/g, " "), /\S+/g)) {
+		const ev = nearest(notes, t.col);
+		if (!ev) continue;
+		const marks = (ev.marks ||= { arts: [], effects: [] });
+		const word = EFFECTS[t.raw.toLowerCase()];
+		if (word) { marks.effects.push(word); continue; }
+		for (const ch of t.raw) if (ART_CHARS[ch] && !marks.arts.includes(ART_CHARS[ch])) marks.arts.push(ART_CHARS[ch]);
+	}
+	// D: dynamics (pp … ff, sfz, fp) and hairpins: `<---` crescendo, `>---`
+	// diminuendo, from the event at its start to the one at its last column.
+	for (const row of sys.dynRows) for (const t of rowTokens(src(row), /[<>][-_|]*|[a-z]+/g)) {
+		if (t.raw[0] === "<" || t.raw[0] === ">") {
+			const from = atOrBefore(events, t.col);
+			const to = atOrBefore(events, t.end - 1);
+			if (!from) continue;
+			(from.wedgeStart ||= t.raw[0] === "<" ? "crescendo" : "diminuendo");
+			if (to && to !== from) to.wedgeStop = true;
+			else from.wedgeStopAfter = true;
+			continue;
+		}
+		if (!DYNAMICS.has(t.raw)) continue;
+		const ev = atOrBefore(events, t.col);
+		if (ev) ev.dynamic = t.raw;
+	}
+	// T: free text, words joined by single spaces ("hit this HARD").
+	for (const row of sys.textRows) for (const t of rowTokens(src(row).replace(/\|/g, " "), /\S+(?: \S+)*/g)) {
+		const ev = atOrBefore(events, t.col);
+		if (ev) (ev.words ||= []).push(t.raw);
+	}
 }

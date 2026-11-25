@@ -94,6 +94,42 @@ x   |
 ````
 (a C-major scale: each row is a pitch step; bottom drawn line = E4 in treble.)
 
+**Markings: `A:`, `D:`, `T:` rows** — aligned by column like `H:`, under or over the
+staff:
+
+- `A:` articulations on the note at (or nearest) the column: `>` accent, `^` marcato,
+  `.` staccato, `-` tenuto, `'` staccatissimo, `U` fermata; combine symbols (`>.`).
+  Brass effects are words: `fall`, `doit`, `scoop`, `plop`, `shake`.
+- `D:` dynamics (`pp` … `ff`, `sfz`, `fp`, …) on the beat they're written under, and
+  hairpins: `<----` crescendo, `>----` diminuendo, from the column of `<`/`>` to the
+  end of the dashes (they can run through a `|`).
+- `T:` text above the staff: words separated by single spaces stay together
+  (`T: |hit this HARD`).
+
+Each kind of row can repeat (two `A:` rows, say) when marks sit too close to share one.
+
+````markdown
+```music
+mode: notation
+unit: 1/8
+
+T: |hit this HARD
+H: |C7       F7
+   |--------|--------|
+   |        |        |
+   |--------|--------|
+   |x_      |        |
+   |--------|--------|
+   |  x_    |        |
+   |----x_--|x_______|
+   |      x_|        |
+   |--------|--------|
+A: |>.  fall|U
+A: |  ^
+D: |mf<-----|-    pp
+```
+````
+
 **Ties across barlines** — keep the `_` run going straight through the `|` and the note
 is held into the next bar: it's split at the barline into two notes joined by a tie.
 Works across several barlines (`x___|____|__`) and for chords (several rows starting in
