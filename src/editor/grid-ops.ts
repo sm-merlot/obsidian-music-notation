@@ -9,7 +9,7 @@ const GRID_TOKEN = /[-|0-9xX#bn]/;
 /** Column where grid content starts (after an optional `e:`/`F#:` label), or -1. */
 export function gridStart(text: string): number {
 	if (DIRECTIVE.test(text)) return -1;
-	if (/^\s*[HhLl]\s*:/.test(text)) return -1;
+	if (/^\s*[HhLlAaDdTt]\s*:/.test(text)) return -1;
 	if (/^\s*\[.*\]\s*$/.test(text)) return -1;
 	const lab = text.match(/^(\s*[A-Ga-g][#b]?\s*:\s*)(.*)$/);
 	const start = lab ? lab[1].length : 0;
@@ -114,7 +114,7 @@ export function unitsPerBar(d: Dir): number {
 	return Math.max(1, Math.round((d.beats / d.beatType) * (d.unitDenom / d.unitNum)));
 }
 
-const isHL = (t: string) => /^\s*[HhLl]\s*:/.test(t);
+const isHL = (t: string) => /^\s*[HhLlAaDdTt]\s*:/.test(t);
 
 /** Full line span [top, bot] of the system containing `line` (staff + H:/L: rows
  *  + interior single blanks), or null. Crosses a SINGLE blank (interior pitch
@@ -260,7 +260,7 @@ export function addContinuation(lines: string[], pos: Pos): Edit | null {
 	const R = Math.max(0, ...clone.filter((t, k) => rows[k].includes("|")).map((t) => t.length));
 	clone = clone.map((t, k) => {
 		if (rows[k].includes("|") || t === "") return t;
-		const hl = rows[k].match(/^\s*[HhLl]\s*:\s?/);
+		const hl = rows[k].match(/^\s*[HhLlAaDdTt]\s*:\s?/);
 		const keep = hl ? hl[0] : "";
 		return keep + " ".repeat(Math.max(0, (R || rows[k].length) - keep.length));
 	});
@@ -425,7 +425,7 @@ function blankRow(text: string, barWidth = 0): string {
 	// barWidth > 0: every non-empty bar segment is rebuilt at that width
 	const fill = (body: string, f: string) =>
 		barWidth > 0 ? body.split("|").map((seg) => (seg.length ? f.repeat(barWidth) : "")).join("|") : body.replace(/[^|]/g, f);
-	const hl = text.match(/^\s*[HhLl]\s*:\s?/); // H:/L: -> keep label, blank chords/lyrics (space)
+	const hl = text.match(/^\s*[HhLlAaDdTt]\s*:\s?/); // H:/L: -> keep label, blank chords/lyrics (space)
 	if (hl) return text.slice(0, hl[0].length) + fill(text.slice(hl[0].length), " ");
 	const s = gridStart(text);
 	const f = fillChar(text);

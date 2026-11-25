@@ -37,6 +37,33 @@ function clefXml(type, number) {
 	}
 }
 
+// A: marks as <notations> children: articulations (incl. the brass effects
+// MusicXML has: falloff, doit, scoop, plop), fermata, and shake as an ornament.
+function marksXml(marks) {
+	if (!marks) return "";
+	const arts = marks.arts.filter((a) => a !== "fermata");
+	const effects = marks.effects.filter((x) => x !== "shake");
+	const artXml = arts.concat(effects).map((a) => `<${a}/>`).join("");
+	return (
+		(artXml ? `<articulations>${artXml}</articulations>` : "") +
+		(marks.arts.includes("fermata") ? `<fermata type="upright"/>` : "") +
+		(marks.effects.includes("shake") ? `<ornaments><shake/></ornaments>` : "")
+	);
+}
+
+// D: and T: marks as <direction>s before the event: text above, dynamics
+// and hairpins below.
+function directionsXml(e, staffTag) {
+	let out = "";
+	const dir = (placement, inner) =>
+		`<direction placement="${placement}"><direction-type>${inner}</direction-type>${staffTag}</direction>`;
+	for (const w of e.words || []) out += dir("above", `<words>${esc(w)}</words>`);
+	if (e.wedgeStop) out += dir("below", `<wedge type="stop"/>`);
+	if (e.dynamic) out += dir("below", `<dynamics><${e.dynamic}/></dynamics>`);
+	if (e.wedgeStart) out += dir("below", `<wedge type="${e.wedgeStart}"/>`);
+	return out;
+}
+
 // One <note> (or chord member) / rest, with accidental, tuplet, beam, lyric.
 function noteXml(e, n, i, ctx) {
 	const { div, type, dots, timeMod, beam, lyric, tupletNot, staffTag, voice } = ctx;
@@ -57,7 +84,7 @@ function noteXml(e, n, i, ctx) {
 	// <notations> — per note, so each chord member ties independently.
 	const tie = (n.tieStop ? '<tie type="stop"/>' : "") + (n.tieStart ? '<tie type="start"/>' : "");
 	const tied = (n.tieStop ? '<tied type="stop"/>' : "") + (n.tieStart ? '<tied type="start"/>' : "");
-	const notInner = tied + (i === 0 ? tupletNot : "");
+	const notInner = tied + (i === 0 ? tupletNot + marksXml(e.marks) : "");
 	const notations = notInner ? `<notations>${notInner}</notations>` : "";
 	return (
 		`<note${idAttr}>${i > 0 ? "<chord/>" : ""}` +
@@ -90,6 +117,7 @@ function voiceXml(events, d, syllab, staff, ids) {
 		}
 		// chords print once (on the top staff / single staff)
 		if (e.chord && staff !== 2) body += harmonyXml(e.chord);
+		body += directionsXml(e, staffTag);
 		const beam = roles[ei] ? `<beam number="1">${roles[ei]}</beam>` : "";
 		let lyric = "";
 		if (e.syllables && e.syllables.length) {
@@ -97,11 +125,10 @@ function voiceXml(events, d, syllab, staff, ids) {
 			lyric = `<lyric><syllabic>${s.syllabic}</syllabic><text>${esc(s.text)}</text></lyric>`;
 		}
 		const ctx = { div: dp.div, type, dots, timeMod, beam, lyric, tupletNot, staffTag, voice, ids };
-		if (e.rest || !e.notes.length) {
-			body += noteXml(e, null, 0, ctx);
-			return;
-		}
-		e.notes.forEach((n, i) => (body += noteXml(e, n, i, ctx)));
+		if (e.rest || !e.notes.length) body += noteXml(e, null, 0, ctx);
+		else e.notes.forEach((n, i) => (body += noteXml(e, n, i, ctx)));
+		// a hairpin that starts and ends on one event closes after it
+		if (e.wedgeStopAfter) body += `<direction placement="below"><direction-type><wedge type="stop"/></direction-type>${staffTag}</direction>`;
 	});
 	return body;
 }
